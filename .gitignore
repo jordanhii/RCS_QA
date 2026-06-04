@@ -14,6 +14,8 @@ __pycache__/
 *.pyc
 *.pyo
 rc_sync_state.json
+state.json
+state_rcclientplatform10me.json
 
 # OS
 .DS_Store
