@@ -1,0 +1,19 @@
+# Environment — credentials, never commit
+.env
+
+# Node
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build output
+frontend/dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+rc_sync_state.json
+
+# OS
+.DS_Store

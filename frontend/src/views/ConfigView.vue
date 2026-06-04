@@ -1,0 +1,516 @@
+<template>
+    <div class="config-page">
+        <div class="page-header">
+            <div>
+                <h2 class="page-title">告警配置</h2>
+                <p class="page-subtitle">管理各告警类型的检测阈值与参数</p>
+            </div>
+            <el-button type="primary" @click="addConfig">
+                <el-icon style="margin-right: 5px;"><Plus /></el-icon> 新增配置
+            </el-button>
+        </div>
+
+        <div class="type-selector-row">
+            <span class="type-selector-label">告警类型：</span>
+            <el-select
+                v-model="activeTab"
+                size="default"
+                style="width:220px;"
+                @change="onTabChange"
+            >
+                <el-option
+                    v-for="t in typeNames"
+                    :key="String(t.id)"
+                    :label="t.label"
+                    :value="String(t.id)"
+                />
+            </el-select>
+            <span class="type-selector-hint">{{ currentGroupHint }}</span>
+        </div>
+
+        <div class="tab-body">
+            <div v-if="isLoading" style="padding: 20px;"><el-skeleton :rows="4" animated /></div>
+            <el-empty v-else-if="configs.length === 0" description="暂无配置，点击右上角「新增配置」" style="padding: 40px 0;" />
+
+        <el-collapse v-else v-model="activeCol" class="config-collapse">
+            <el-collapse-item v-for="cfg in configs" :key="cfg._id" :name="cfg._id">
+                <template #title>
+                    <div class="collapse-header">
+                        <template v-if="!cfg._isEditingName">
+                            <span class="cfg-name">{{ cfg.name || '未命名配置' }}</span>
+                            <el-button v-if="cfg._isEditing" link type="primary" class="edit-name-btn" @click.stop="startEditName(cfg)">
+                                <el-icon><Edit /></el-icon>
+                            </el-button>
+                        </template>
+                        <template v-else>
+                            <el-input v-model="cfg._tempName" size="small" style="width: 240px;"
+                                @click.stop @keyup.enter.stop="confirmEditName(cfg)" />
+                            <el-button type="success" size="small" circle style="margin-left: 8px;"
+                                @click.stop="confirmEditName(cfg)">
+                                <el-icon><Check /></el-icon>
+                            </el-button>
+                            <el-button type="info" plain size="small" circle @click.stop="cancelEditName(cfg)">
+                                <el-icon><Close /></el-icon>
+                            </el-button>
+                        </template>
+                        <div style="flex: 1;" />
+                        <template v-if="!cfg._isEditing">
+                            <el-button size="small" @click.stop="enterEditMode(cfg)">编辑</el-button>
+                            <el-button type="danger" plain size="small"
+                                @click.stop="deleteConfig(cfg._id)">删除</el-button>
+                        </template>
+                        <template v-else>
+                            <el-button type="success" size="small" :loading="cfg._isSaving"
+                                @click.stop="saveConfig(cfg)">保存</el-button>
+                            <el-button plain size="small"
+                                @click.stop="cancelEditMode(cfg)">取消</el-button>
+                        </template>
+                    </div>
+                </template>
+
+                <div class="params-list">
+                    <!-- 存款天/月 (1,2)：持续时间 开发中 -->
+                    <template v-if="[1, 2].includes(Number(activeTab))">
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                持续时间（分钟）<el-tag size="small" class="dev-tag">开发中</el-tag>
+                            </div>
+                            <el-input-number v-model="cfg.durationMin" controls-position="right"
+                                style="width:160px;" disabled />
+                        </div>
+                    </template>
+
+                    <!-- 提款天/月 (3,4)：持续时间 active -->
+                    <template v-if="[3, 4].includes(Number(activeTab))">
+                        <div class="param-row">
+                            <div class="param-row-label">持续时间（分钟）</div>
+                            <el-input-number v-model="cfg.durationMin" :min="1" :step="5"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                    </template>
+
+
+                    <!-- 存提款 (1,2,3,4)：持续时间值、金额 开发中 -->
+                    <template v-if="[1, 2, 3, 4].includes(Number(activeTab))">
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                持续时间值<el-tag size="small" class="dev-tag">开发中</el-tag>
+                            </div>
+                            <el-input-number disabled style="width:160px;" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                金额（上限/下限）<el-tag size="small" class="dev-tag">开发中</el-tag>
+                            </div>
+                            <el-input disabled placeholder="由表格平均值直出" style="width:200px;" />
+                        </div>
+                    </template>
+
+                    <!-- 提款天/月 (3,4)：连续告警倍数 active -->
+                    <template v-if="[3, 4].includes(Number(activeTab))">
+                        <div class="param-row">
+                            <div class="param-row-label">连续告警倍数（上限）</div>
+                            <el-input-number v-model="cfg.multiUpper" :min="1" :step="0.05" :precision="2"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">连续告警倍数（下限）</div>
+                            <el-input-number v-model="cfg.multiLower" :min="0" :max="1" :step="0.05" :precision="2"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                    </template>
+
+                    <!-- 24h存提/投存比 (5,6,7) -->
+                    <template v-if="[5, 6, 7].includes(Number(activeTab))">
+                        <div class="param-row">
+                            <div class="param-row-label">比例</div>
+                            <el-input-number v-model="cfg.ratioLimit" :min="0" :step="0.1" :precision="2"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">连续告警倍数</div>
+                            <el-input-number v-model="cfg.ratioMulti" :min="0" :step="0.1" :precision="2"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">告警窗口（分钟）</div>
+                            <el-input-number v-model="cfg.alertWindow" :min="1" :step="5"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                    </template>
+
+                    <!-- 游戏盈利(CG) (8)：告警阈值X / 连续告警阈值Y -->
+                    <template v-if="Number(activeTab) === 8">
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                告警阈值 X (%)
+                                <el-tooltip placement="top">
+                                    <template #content>条件1：当前RTP偏差值 &lt; X% → 触发</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.xThreshold" :min="0" :precision="1" :step="100"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                连续告警阈值 Y (%)
+                                <el-tooltip placement="top">
+                                    <template #content>条件3：上一GGR − 当日GGR ≥ |上一GGR| × Y% → 触发</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.yThreshold" :min="0" :precision="1" :step="1"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                检查间隔（分钟）
+                                <el-tooltip placement="top">
+                                    <template #content>当前告警与上一条告警的时间差 ≥ 此值时，视为普通告警，不检查连续告警逻辑，连续告警结果显示 -</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.alertInterval" :min="1" :step="5"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                    </template>
+
+                    <!-- 存提差环比 (9)：检查间隔 X + 下降阈值 Y -->
+                    <template v-if="Number(activeTab) === 9">
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                检查间隔 X（分钟）
+                                <el-tooltip placement="top">
+                                    <template #content>每隔 X 分钟检查一次存提差变化</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.alertInterval" :min="1" :step="5"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                下降阈值 Y
+                                <el-tooltip placement="top">
+                                    <template #content>Last存提差 − 当前存提差 ≥ Y 时告警结果为 TRUE</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.yThreshold" :min="0" :step="1" :precision="0"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                    </template>
+
+                    <!-- 存提差同比 (10) -->
+                    <template v-if="Number(activeTab) === 10">
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                提款阈值 X
+                                <el-tooltip placement="top">
+                                    <template #content>日累计提款数值 ≥ X 时，条件1为 TRUE</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.xThreshold" :min="0" :step="1000" :precision="0"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">日累计存提差比较</div>
+                            <div style="font-size:13px;color:#909399;line-height:1.8;">
+                                存提差金额 &lt; 以下任意两个历史值时，条件2为 TRUE：<br/>
+                                · 昨日同时间累计存提差<br/>
+                                · 上周同天同时间累计存提差<br/>
+                                · 上月同天同时间累计存提差
+                            </div>
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                检查间隔 X（分钟）
+                                <el-tooltip placement="top">
+                                    <template #content>每隔 X 分钟重新检查全部条件，全部为 TRUE 时告警结果为 TRUE</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.alertInterval" :min="1" :step="5"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                    </template>
+
+                    <!-- 所有类型：配置生效时间 开发中 -->
+                    <div class="param-row">
+                        <div class="param-row-label">
+                            配置生效时间<el-tag size="small" class="dev-tag">开发中</el-tag>
+                        </div>
+                        <el-input disabled placeholder="YYYY/MM/DD" style="width:160px;" />
+                    </div>
+                </div>
+            </el-collapse-item>
+        </el-collapse>
+        </div><!-- /tab-body -->
+    </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import axios from 'axios'
+import { ElNotification, ElMessageBox } from 'element-plus'
+import { Plus, Edit, Check, Close, InfoFilled } from '@element-plus/icons-vue'
+
+const API = 'http://localhost:3000/api'
+const activeTab = ref('1')
+const activeCol = ref([])
+const configs = ref([])
+const isLoading = ref(false)
+
+// prettier-ignore
+const typeNames = [
+    { id: 1, label: '存款（天）' }, { id: 2, label: '存款（月）' },
+    { id: 3, label: '提款（天）' }, { id: 4, label: '提款（月）' },
+    { id: 5, label: '24h 存提' },  { id: 6, label: '投/存比' },
+    { id: 7, label: '投/存+惠比' }, { id: 8, label: '游戏盈利(CG)' },
+    { id: 9, label: '存提差环比' },
+    { id: 10, label: '存提差同比' },
+]
+
+const GROUP_HINTS = {
+    1: '存款（天）— 检测普通告警（上升/下降）',
+    2: '存款（月）— 检测普通告警（上升/下降）',
+    3: '提款（天）— 检测普通 + 连续告警（持续倍数）',
+    4: '提款（月）— 检测普通 + 连续告警（持续倍数）',
+    5: '24h 存提额 — 检测比值阈值 + 连续增量',
+    6: '投/存比 — 检测比值阈值 + 连续增量',
+    7: '投/存+惠比 — 检测比值阈值 + 连续增量',
+    8: '游戏盈利(CG) — 检测 COLORGAME 普通告警（C1 AND C2）与连续告警（C1 AND C2 AND C3）',
+    9: '存提差环比 — 每 X 分钟检查，Last存提差 − 当前存提差 ≥ Y 时触发',
+    10: '存提差同比 — 日累计提款 ≥ X 且存提差 < 任意两个历史值时触发',
+}
+const currentGroupHint = computed(() => GROUP_HINTS[Number(activeTab.value)] || '')
+
+
+const onTabChange = () => { loadConfigs() }
+
+const loadConfigs = async () => {
+    isLoading.value = true
+    try {
+        const res = await axios.get(`${API}/configs/${activeTab.value}`)
+        configs.value = res.data.map(c => ({
+            ...c,
+            xThreshold:     c.xThreshold    ?? 2500,
+            yThreshold:     c.yThreshold    ?? 10,
+            alertInterval:  c.alertInterval ?? 60,
+            _isEditingName: false,
+            _tempName:      c.name,
+            _isSaving:      false,
+            _isEditing:     false,
+            _original:      null,
+        }))
+        activeCol.value = configs.value.length > 0 ? [configs.value[0]._id] : []
+    } finally {
+        isLoading.value = false
+    }
+}
+
+const enterEditMode = (cfg) => {
+    cfg._original = {
+        durationMin: cfg.durationMin, multiUpper: cfg.multiUpper, multiLower: cfg.multiLower,
+        ratioLimit: cfg.ratioLimit, ratioMulti: cfg.ratioMulti, alertWindow: cfg.alertWindow,
+        xThreshold: cfg.xThreshold, yThreshold: cfg.yThreshold,
+        alertInterval: cfg.alertInterval,
+    }
+    cfg._isEditing = true
+}
+
+const cancelEditMode = (cfg) => {
+    if (cfg._original) {
+        Object.assign(cfg, cfg._original)
+        cfg._original = null
+    }
+    cfg._isEditing = false
+    cfg._isEditingName = false
+}
+
+onMounted(() => onTabChange(activeTab.value))
+
+const startEditName  = (cfg) => { cfg._tempName = cfg.name; cfg._isEditingName = true }
+const cancelEditName = (cfg) => { cfg._isEditingName = false }
+const confirmEditName = (cfg) => {
+    if (!cfg._tempName?.trim()) {
+        ElNotification.warning({ message: '配置名称不能为空', position: 'bottom-right' })
+        return
+    }
+    cfg.name = cfg._tempName
+    cfg._isEditingName = false
+    saveConfig(cfg)
+}
+
+const addConfig = () => {
+    ElMessageBox.prompt('请输入配置名称', '新增配置', {
+        confirmButtonText: '确定', cancelButtonText: '取消', inputPlaceholder: '例：默认配置'
+    }).then(async ({ value }) => {
+        if (!value?.trim()) return
+        const tid = Number(activeTab.value)
+        const res = await axios.post(`${API}/configs`,
+            tid === 8 ? { typeId: tid, name: value, xThreshold: 2500, yThreshold: 10, alertInterval: 60 }
+          : tid === 9 ? { typeId: tid, name: value, alertInterval: 60, yThreshold: 0 }
+          : tid === 10 ? { typeId: tid, name: value, xThreshold: 0, alertInterval: 60 }
+          : { typeId: tid, name: value, durationMin: 30, multiUpper: 1.15, multiLower: 0.85, ratioLimit: 1.5, ratioMulti: 0.5, alertWindow: 30 }
+        )
+        const newCfg = { ...res.data, _isEditingName: false, _tempName: res.data.name, _isSaving: false, _isEditing: true, _original: null }
+        configs.value.push(newCfg)
+        activeCol.value = [...activeCol.value, newCfg._id]
+        ElNotification.success({ message: '配置创建成功', position: 'bottom-right' })
+    }).catch(() => {})
+}
+
+const saveConfig = async (cfg) => {
+    cfg._isSaving = true
+    try {
+        // Build payload explicitly to avoid reactive proxy spread issues
+        const payload = {
+            _id:          cfg._id,
+            typeId:       cfg.typeId,
+            name:         cfg.name,
+            durationMin:  cfg.durationMin,
+            multiUpper:   cfg.multiUpper,
+            multiLower:   cfg.multiLower,
+            ratioLimit:   cfg.ratioLimit,
+            ratioMulti:   cfg.ratioMulti,
+            alertWindow:  cfg.alertWindow,
+            ggrThreshold: cfg.ggrThreshold,
+            xThreshold:    cfg.xThreshold    ?? 2500,
+            yThreshold:    cfg.yThreshold    ?? 10,
+            alertInterval: cfg.alertInterval ?? 60,
+        }
+        await axios.post(`${API}/configs`, payload)
+        cfg._isEditing = false
+        cfg._original = null
+        ElNotification.success({ message: `「${cfg.name}」已保存`, position: 'bottom-right' })
+    } catch {
+        ElNotification.error({ message: '保存失败，请重试', position: 'bottom-right' })
+    } finally {
+        setTimeout(() => cfg._isSaving = false, 300)
+    }
+}
+
+const deleteConfig = (id) => {
+    ElMessageBox.confirm('确定删除此配置？', '删除确认', {
+        type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
+    }).then(async () => {
+        const { data } = await axios.delete(`${API}/configs/${id}`)
+        configs.value = configs.value.filter(c => c._id !== id)
+        activeCol.value = activeCol.value.filter(id2 => id2 !== id)
+        if (data.affectedWithData > 0) {
+            ElNotification.warning({
+                title: '配置已删除',
+                message: `${data.affectedWithData} 个有数据的列表已自动清除关联配置，请重新选择配置。`,
+                duration: 6000, position: 'bottom-right',
+            })
+        } else {
+            ElNotification.info({ message: '配置已删除', position: 'bottom-right' })
+        }
+    }).catch(() => {})
+}
+</script>
+
+<style scoped>
+.config-page { display: flex; flex-direction: column; }
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+}
+.page-title  { margin: 0 0 4px; font-size: 22px; color: var(--qa-heading-color); }
+.page-subtitle { margin: 0; font-size: 13px; color: var(--qa-subtext-color); }
+
+.type-selector-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 0 20px;
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+.type-selector-label {
+    font-size: 14px;
+    color: #606266;
+    white-space: nowrap;
+    font-weight: 500;
+}
+.type-selector-hint {
+    font-size: 12px;
+    color: #909399;
+    background: #f4f4f5;
+    padding: 3px 10px;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+
+.tab-body {
+    border: 1px solid #e4e7ed;
+    border-radius: 6px;
+    padding: 20px;
+    background: #fff;
+}
+
+/* ── 折叠列表 ─────────────────────────────────────────────────────────────── */
+.config-collapse { border-top: none; }
+.config-collapse :deep(.el-collapse-item__header) {
+    padding: 0 16px;
+    height: 52px;
+    background: #fafafa;
+    font-size: 14px;
+}
+.config-collapse :deep(.el-collapse-item__content) {
+    padding: 16px 20px;
+}
+
+.collapse-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+.cfg-name { font-size: 15px; font-weight: 600; color: #409EFF; }
+.edit-name-btn { opacity: 0.4; transition: opacity 0.2s; }
+.collapse-header:hover .edit-name-btn { opacity: 1; }
+
+/* ── 参数行 ───────────────────────────────────────────────────────────────── */
+.params-list { display: flex; flex-direction: column; }
+.param-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f2f5;
+}
+.param-row:last-child { border-bottom: none; }
+.param-row-label {
+    width: 180px;
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: #303133;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.dev-tag {
+    --el-tag-bg-color: #f4f4f5;
+    --el-tag-border-color: #d3d4d6;
+    --el-tag-text-color: #909399;
+    font-size: 10px;
+}
+
+/* ── 游戏盈利配置面板 ──────────────────────────────────────────────────────── */
+.gp-cfg-panel {
+    background: #fff;
+    border: 1px solid #e4e7ed;
+    border-radius: 6px;
+    padding: 0 16px;
+    max-width: 480px;
+}
+</style>

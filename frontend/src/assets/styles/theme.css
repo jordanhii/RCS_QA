@@ -1,0 +1,57 @@
+:root {
+    /* ── 语义色 ──────────────────────────────────────────────────────────── */
+    --qa-pass:    #52c41a;
+    --qa-fail:    #ff4d4f;
+    --qa-neutral: #8c8c8c;
+
+    /* ── 行高亮 ──────────────────────────────────────────────────────────── */
+    --qa-row-mismatch-bg:    #ffe4e1;
+    --qa-row-mismatch-hover: #ffc8c4;
+    --qa-row-ignored-bg:     #f5f7fa;
+
+    /* ── 统计栏 ──────────────────────────────────────────────────────────── */
+    --qa-stats-pass-bg:     #f6ffed;
+    --qa-stats-pass-border: #b7eb8f;
+    --qa-stats-fail-bg:     #fff1f0;
+    --qa-stats-fail-border: #ffa39e;
+
+    /* ── 控制 / 表单区域 ──────────────────────────────────────────────────── */
+    --qa-control-panel-bg:  #f7f8fa;
+    --qa-import-info-bg:    #e8f4ff;
+    --qa-import-preview-bg: #f5f5f5;
+
+    /* ── 文字 ────────────────────────────────────────────────────────────── */
+    --qa-heading-color: #1d2129;
+    --qa-subtext-color: #86909c;
+    --qa-tooltip-border: #c9cdd4;
+
+    /* ── 阴影 ────────────────────────────────────────────────────────────── */
+    --qa-shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
+    --qa-shadow-sm: 0 2px 6px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+    --qa-shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+    --qa-shadow-lg: 0 8px 24px rgba(0,0,0,0.09), 0 3px 6px rgba(0,0,0,0.04);
+
+    /* ── 过渡 ────────────────────────────────────────────────────────────── */
+    --qa-transition:      all 0.2s cubic-bezier(0.4,0,0.2,1);
+    --qa-transition-fast: all 0.12s ease;
+
+    /* ── 圆角 ────────────────────────────────────────────────────────────── */
+    --qa-radius-sm: 4px;
+    --qa-radius-md: 8px;
+    --qa-radius-lg: 12px;
+
+    /* ── 同步栏 ──────────────────────────────────────────────────────────── */
+    --qa-sync-active-bg:     #f0faf0;
+    --qa-sync-active-border: #b7eb8f;
+}
+
+/* ── 全局卡片阴影优化 ─────────────────────────────────────────────────────── */
+.el-card {
+    box-shadow: var(--qa-shadow-sm) !important;
+    border-radius: var(--qa-radius-md) !important;
+    border-color: #eaecef !important;
+    transition: box-shadow 0.25s ease !important;
+}
+.el-card:hover {
+    box-shadow: var(--qa-shadow-md) !important;
+}
