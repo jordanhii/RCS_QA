@@ -17,3 +17,14 @@ rc_sync_state.json
 
 # OS
 .DS_Store
+
+# Vite timestamp files
+*.timestamp-*.mjs
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local env files
+.env.local
+.env.*.local
