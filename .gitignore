@@ -17,6 +17,11 @@ rc_sync_state.json
 state.json
 state_rcclientplatform10me.json
 
+# Utility scripts
+script/export_code.js
+backend/reset_db.js
+CHANGES.txt
+
 # OS
 .DS_Store
 
