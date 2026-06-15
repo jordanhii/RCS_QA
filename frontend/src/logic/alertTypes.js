@@ -9,6 +9,8 @@ export const ALERT_TYPE_MAP = {
     7: 'bet-deposit-promo',
     9: 'netflow-additional-present-day',
     10: 'netflow-additional-historical',
+    11: 'reward-cumulative',
+    12: 'reward-interval',
 }
 
 /** Full page titles shown in the sidebar and page header */
@@ -22,6 +24,8 @@ export const PAGE_TITLES = {
     7: '投/存+惠比',
     9: '存提差环比',
     10: '存提差同比',
+    11: '优惠同比',
+    12: '优惠环比',
 }
 
 /** Short display names used in import dialogs and summaries */
@@ -32,7 +36,9 @@ export const TYPE_DISPLAY_NAMES = {
     4: '提款(月)',
     5: '24h存提',
     6: '投/存比',
-    7: '投/存+惠比'
+    7: '投/存+惠比',
+    11: '优惠同比',
+    12: '优惠环比'
 }
 
 /** Dropdown options for the continuous alert type selector */

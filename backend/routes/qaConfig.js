@@ -47,6 +47,8 @@ router.post('/rc-envs', ah(async (req, res) => {
     const { name, rcBaseUrl } = req.body
     if (!name?.trim() || !rcBaseUrl?.trim())
         return res.status(400).json({ error: 'name 和 rcBaseUrl 为必填项' })
+    if (!/^https?:\/\/.+/.test(rcBaseUrl.trim()))
+        return res.status(400).json({ error: 'rcBaseUrl 必须是有效的 HTTP/HTTPS 链接（以 http:// 或 https:// 开头）' })
     const cfg = await QAConfig.findOneAndUpdate(
         { singleton: 'default' },
         { $push: { rcEnvs: { name: name.trim(), rcBaseUrl: rcBaseUrl.trim().replace(/\/+$/, '') } } },

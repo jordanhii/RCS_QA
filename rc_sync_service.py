@@ -124,30 +124,8 @@ def extract_records(text):
     return recs
 
 
-def filter_recent(records, days=14):
-    """只保留最近 N 天的记录，避免日期字段为空时 RC 返回大量历史数据污染缓存。"""
-    from datetime import datetime, timedelta
-    cutoff = datetime.now() - timedelta(days=days)
-    result = []
-    skipped = 0
-    for r in records:
-        t_str = str(r.get('alertGeneratedTime') or r.get('createdAt') or '')
-        try:
-            t = datetime.strptime(t_str[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
-            if t >= cutoff:
-                result.append(r)
-            else:
-                skipped += 1
-        except Exception:
-            result.append(r)   # 无法解析时间则保留
-    if skipped:
-        log(f"⏱ 过滤掉 {skipped} 条超过 {days} 天的旧数据")
-    return result
-
-
 def push_to_backend(records, source, rc_url=''):
     """Synchronously POST records to the QA backend cache (called in a thread executor)."""
-    # 不在此处过滤旧数据——由 RCSQA 的「同步起始时间」统一控制
     if not records:
         return
     payload = json.dumps({"records": records, "source": source, "rcBaseUrl": rc_url}).encode()

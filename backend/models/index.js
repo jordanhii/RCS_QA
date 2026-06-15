@@ -16,6 +16,11 @@ const ConfigSchema = new mongoose.Schema({
     xThreshold:   { type: Number, default: 2500 },
     yThreshold:   { type: Number, default: 10 },
     alertInterval:{ type: Number, default: 60 },
+    // ── 优惠同比 (typeId 11) / 优惠环比 (typeId 12) 配置参数（镜像风控优惠监控配置）──
+    startThreshold:{ type: Number, default: 0 },    // 同比：日累计优惠起步判断额
+    mult7:         { type: Number, default: 1.2 },  // 同比：≥前7天平均 × 倍数
+    mult30:        { type: Number, default: 1.2 },  // 同比：≥前30天平均 × 倍数
+    multLast:      { type: Number, default: 1.2 },  // 环比：≥上时段 × 倍数
 }, SCHEMA_OPTS)
 
 // 同一 typeId 下配置名唯一（稀疏索引允许 name 为空）
@@ -54,6 +59,15 @@ const TestListSchema = new mongoose.Schema({
         lowerThanYesterday:   { type: String, default: null },
         lowerThanLastWeek:    { type: String, default: null },
         lowerThanLastMonth:   { type: String, default: null },
+        // ── 优惠同比 (typeId 11) / 优惠环比 (typeId 12) 专用字段 ─────────────────
+        // null = 接口未返回。配置驱动：记录存原始值，倍数由 Config 乘（镜像风控优惠监控配置）。
+        rewardType:    { type: String, default: null },   // 优惠类型（ALL / 细分活动名）
+        todayTotal:    { type: Number, default: null },   // 今日累计优惠
+        avg7:          { type: Number, default: null },   // 同比：前7天平均日累计优惠（原始）
+        avg30:         { type: Number, default: null },   // 同比：前30天平均日累计优惠（原始）
+        currentGrowth: { type: Number, default: null },   // 环比：本时段增长
+        lastGrowth:    { type: Number, default: null },   // 环比：上时段增长（原始）
+        alertSeq:      { type: Number, default: null },   // 环比：今日第 N 个告警
     }],
 }, SCHEMA_OPTS)
 

@@ -149,7 +149,7 @@
                                     <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
                                 </el-tooltip>
                             </div>
-                            <el-input-number v-model="cfg.xThreshold" :min="0" :precision="1" :step="100"
+                            <el-input-number v-model="cfg.xThreshold" :precision="1" :step="1"
                                 controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
                         </div>
                         <div class="param-row">
@@ -237,6 +237,69 @@
                         </div>
                     </template>
 
+                    <!-- 优惠同比 (11)：起步判断额 + 前7天倍数 + 前30天倍数（镜像风控优惠监控配置） -->
+                    <template v-if="Number(activeTab) === 11">
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                日累计优惠起步判断额
+                                <el-tooltip placement="top">
+                                    <template #content>今日累计优惠 ≥ 此值后才开始判断是否告警（条件1）</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.startThreshold" :min="0" :step="1" :precision="0"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                ≥前7天平均 × 倍数
+                                <el-tooltip placement="top">
+                                    <template #content>今日累计优惠 ≥ 前7天平均日累计优惠 × 此倍数（条件2之一，倍数 ≥1）</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.mult7" :min="1" :step="0.1" :precision="2"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                ≥前30天平均 × 倍数
+                                <el-tooltip placement="top">
+                                    <template #content>今日累计优惠 ≥ 前30天平均日累计优惠 × 此倍数（条件2之二，倍数 ≥1）</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.mult30" :min="1" :step="0.1" :precision="2"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                    </template>
+
+                    <!-- 优惠环比 (12)：环比间隔 + 上时段倍数 -->
+                    <template v-if="Number(activeTab) === 12">
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                环比间隔时间（分钟）
+                                <el-tooltip placement="top">
+                                    <template #content>每 N 分钟计算该时段的优惠领取增长额（对比窗口大小）</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.alertInterval" :min="1" :step="5"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                ≥上时段 × 倍数
+                                <el-tooltip placement="top">
+                                    <template #content>本时段增长 ≥ 上时段增长 × 此倍数 时告警（倍数 ≥1）</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.multLast" :min="1" :step="0.1" :precision="2"
+                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                        </div>
+                    </template>
+
                     <!-- 所有类型：配置生效时间 开发中 -->
                     <div class="param-row">
                         <div class="param-row-label">
@@ -271,6 +334,8 @@ const typeNames = [
     { id: 7, label: '投/存+惠比' }, { id: 8, label: '游戏盈利(CG)' },
     { id: 9, label: '存提差环比' },
     { id: 10, label: '存提差同比' },
+    { id: 11, label: '优惠同比' },
+    { id: 12, label: '优惠环比' },
 ]
 
 const GROUP_HINTS = {
@@ -284,6 +349,8 @@ const GROUP_HINTS = {
     8: '游戏盈利(CG) — 检测 COLORGAME 普通告警（C1 AND C2）与连续告警（C1 AND C2 AND C3）',
     9: '存提差环比 — 每 X 分钟检查，Last存提差 − 当前存提差 ≥ Y 时触发',
     10: '存提差同比 — 日累计提款 ≥ X 且存提差 < 任意两个历史值时触发',
+    11: '优惠同比 — 自校验：今日累计 ≥ 前7天/前30天阈值（阈值取自注释，无需配置参数）',
+    12: '优惠环比 — 自校验：本时段增长 ≥ 上时段阈值（阈值取自注释，无需配置参数）',
 }
 const currentGroupHint = computed(() => GROUP_HINTS[Number(activeTab.value)] || '')
 
@@ -354,6 +421,8 @@ const addConfig = () => {
             tid === 8 ? { typeId: tid, name: value, xThreshold: 2500, yThreshold: 10, alertInterval: 60 }
           : tid === 9 ? { typeId: tid, name: value, alertInterval: 60, yThreshold: 0 }
           : tid === 10 ? { typeId: tid, name: value, xThreshold: 0, alertInterval: 60 }
+          : tid === 11 ? { typeId: tid, name: value, startThreshold: 0, mult7: 1.2, mult30: 1.2 }
+          : tid === 12 ? { typeId: tid, name: value, alertInterval: 30, multLast: 1.2 }
           : { typeId: tid, name: value, durationMin: 30, multiUpper: 1.15, multiLower: 0.85, ratioLimit: 1.5, ratioMulti: 0.5, alertWindow: 30 }
         )
         const newCfg = { ...res.data, _isEditingName: false, _tempName: res.data.name, _isSaving: false, _isEditing: true, _original: null }

@@ -25,7 +25,6 @@
 
                     <template #title>
                         <div class="header-title-wrapper">
-                            <span style="font-size:18px;margin-right:8px;">📋</span>
                             <template v-if="!list._isEditingName">
                                 <span class="header-title">{{ list.listName }}</span>
                                 <el-button link type="primary" class="edit-icon" @click.stop="startEditName(list)">
@@ -39,6 +38,16 @@
                                     @click.stop="confirmEditName(list)">
                                     <el-icon><Check /></el-icon>
                                 </el-button>
+                            </template>
+
+                            <!-- 状态 badge：仅在有异常时提示，「全部一致」与条数不再显示 -->
+                            <template v-if="!list._isEditingName && list.records && list.records.length > 0 && getMatchCount(list).fail > 0">
+                                <div style="flex:1;" />
+                                <span class="list-status-badge badge-fail">✗ {{ getMatchCount(list).fail }} 条异常</span>
+                            </template>
+                            <template v-else-if="!list._isEditingName && (!list.records || list.records.length === 0)">
+                                <div style="flex:1;" />
+                                <span class="list-status-badge badge-empty">暂无数据</span>
                             </template>
                         </div>
                     </template>
@@ -173,8 +182,9 @@
                             <el-select v-model="list.rcBaseUrl" size="small" style="width:240px;"
                                 placeholder="请选择 RC 地址（开启同步必填）"
                                 @change="saveList(list, false)">
-                                <el-option v-for="env in rcEnvOptions" :key="env.rcBaseUrl"
-                                    :label="`${env.name}  (${env.rcBaseUrl})`" :value="env.rcBaseUrl" />
+                                <el-option v-for="(env, idx) in rcEnvOptions" :key="env.rcBaseUrl"
+                                    :label="idx === 0 ? `${env.name}（默认）  (${env.rcBaseUrl})` : `${env.name}  (${env.rcBaseUrl})`"
+                                    :value="env.rcBaseUrl" />
                                 <template v-if="rcEnvOptions.length === 0">
                                     <el-option disabled value="" label="暂无配置，请前往「接口配置」添加" />
                                 </template>
@@ -442,7 +452,7 @@
                             <template #default="{ row, $index }">
                                 <el-button size="small" link
                                     :type="row.ignored ? 'primary' : 'warning'"
-                                    @click="toggleIgnore(row)">
+                                    @click="toggleIgnore(row, list)">
                                     {{ row.ignored ? '取消忽略' : '忽略' }}
                                 </el-button>
                                 <el-button size="small" link type="danger"
@@ -686,7 +696,7 @@ const addRow = list => {
     list._currentPage = 1
 }
 
-const toggleIgnore = row => { row.ignored = !row.ignored }
+const toggleIgnore = (row, list) => { row.ignored = !row.ignored; saveList(list, false) }
 const deleteRow    = (list, pageIndex) => {
     const start = (list._currentPage - 1) * list._pageSize
     list.records.splice(start + pageIndex, 1)
@@ -922,10 +932,20 @@ onBeforeUnmount(() => {
 <style scoped>
 .main-card { border-radius: 8px; }
 
-.header-title-wrapper { display: flex; align-items: center; width: 100%; }
-.header-title { font-weight: bold; color: var(--qa-heading-color); }
+.header-title-wrapper { display: flex; align-items: center; width: 100%; gap: 6px; padding-right: 12px; }
+.header-title { font-weight: 700; color: var(--qa-heading-color); font-size: 14px; }
 .edit-icon { opacity: 0.4; transition: opacity 0.2s; }
 .header-title-wrapper:hover .edit-icon { opacity: 1; }
+
+/* ── 列表状态 badge ──────────────────────────────────────────────────────── */
+.list-status-badge {
+    display: inline-flex; align-items: center;
+    font-size: 11px; font-weight: 600;
+    padding: 2px 10px; border-radius: 20px;
+    white-space: nowrap; flex-shrink: 0;
+}
+.badge-fail  { background: #fff1f0; color: #ff4d4f; border: 1px solid #ffa39e; }
+.badge-empty { background: #f5f5f5; color: #bfbfbf; border: 1px solid #e8eaed; font-weight: 400; }
 
 .control-panel {
     background: var(--qa-control-panel-bg);
@@ -975,7 +995,7 @@ onBeforeUnmount(() => {
 .action-bar {
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px; padding: 6px 10px; margin-bottom: 6px;
-    background: #fdf6ec; border: 1px solid #faecd8;
+    background: #f7f8fa; border: 1px solid #eaecef;
     border-radius: 6px; font-size: 13px; flex-wrap: wrap;
 }
 .action-bar-left  { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }

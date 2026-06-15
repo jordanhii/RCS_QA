@@ -55,6 +55,7 @@ const TYPE_ID_MAP = {
     'netflow': 5, 'bet-deposit': 6, 'bet-deposit-promo': 7,
     'netflow-additional-present-day': 9,
     'netflow-additional-historical': 10,
+    'reward-cumulative': 11, 'reward-interval': 12,
 }
 
 export function normUrl(u) {
@@ -135,6 +136,16 @@ router.post('/sync-cache', (req, res) => {
     else if (source === 'bet')    cache.bet         = records
     else                          cache.gameProfit  = records
     cache.updatedAt = new Date().toISOString()
+
+    // LRU eviction：最多保留 20 个 URL 的缓存，超出时淘汰最老的
+    const MAX_CACHE_URLS = 20
+    const keys = Object.keys(syncCacheMap)
+    if (keys.length > MAX_CACHE_URLS) {
+        const oldest = keys.sort((a, b) =>
+            (syncCacheMap[a].updatedAt || '') < (syncCacheMap[b].updatedAt || '') ? -1 : 1
+        )[0]
+        delete syncCacheMap[oldest]
+    }
     persistCacheToDb(k, cache)
     console.log(`[sync-cache] [${k}] [${source}] ${records.length} 条`)
     res.json({ success: true, count: records.length })
@@ -253,6 +264,9 @@ function formatSyncRecord(item, typeId) {
                 } else if (typeof raw === 'string' && (raw.toLowerCase() === 'true' || raw.toLowerCase() === 'false')) {
                     // RC 返回布尔字符串 → 统一大写
                     base[f.listField] = raw.toLowerCase() === 'true' ? 'TRUE' : 'FALSE'
+                } else if (typeof raw === 'string' && isNaN(Number(raw))) {
+                    // 非数字字符串（如 优惠类型 ALL / 细分活动名）→ 原样保留
+                    base[f.listField] = raw
                 } else {
                     base[f.listField] = Number(raw)
                 }

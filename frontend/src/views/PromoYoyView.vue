@@ -1,16 +1,10 @@
 <template>
     <div style="display: flex; flex-direction: column; gap: 20px;">
-        <el-card shadow="hover" class="main-card" :style="{ '--type-color': typeColor, '--type-color-light': typeColorLight }">
+        <el-card shadow="hover" class="main-card">
             <template #header>
-                <div class="page-card-header">
-                    <div class="page-card-header-left">
-                        <div class="page-type-accent" :style="{ background: typeColor }"></div>
-                        <div>
-                            <h2 class="page-card-title">{{ pageTitle }}</h2>
-                            <p class="page-card-subtitle">告警逻辑质检 · typeId {{ typeId }}</p>
-                        </div>
-                    </div>
-                    <el-button type="primary" @click="createNewList" size="default">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 style="margin:0; color: var(--qa-heading-color);">{{ PAGE_TITLE }}</h2>
+                    <el-button type="primary" @click="createNewList" size="large">
                         <el-icon style="margin-right: 5px;"><Plus /></el-icon> 新增测试列表
                     </el-button>
                 </div>
@@ -23,6 +17,7 @@
                 <el-collapse-item v-for="list in allLists" :key="list._id" :name="list._id">
                     <template #title>
                         <div class="header-title-wrapper">
+                            <span style="font-size: 18px; margin-right: 8px;">📋</span>
                             <template v-if="!list._isEditingName">
                                 <span class="header-title">{{ list.listName }}</span>
                                 <el-button link type="primary" class="edit-icon" @click.stop="startEditName(list)">
@@ -36,16 +31,6 @@
                                     @click.stop="confirmEditName(list)">
                                     <el-icon><Check /></el-icon>
                                 </el-button>
-                            </template>
-
-                            <!-- 状态 badge：仅在有异常时提示，「全部一致」与条数不再显示 -->
-                            <template v-if="!list._isEditingName && list.records && list.records.length > 0 && getMatchCount(list).fail > 0">
-                                <div style="flex:1;" />
-                                <span class="list-status-badge badge-fail">✗ {{ getMatchCount(list).fail }} 条异常</span>
-                            </template>
-                            <template v-else-if="!list._isEditingName && (!list.records || list.records.length === 0)">
-                                <div style="flex:1;" />
-                                <span class="list-status-badge badge-empty">暂无数据</span>
                             </template>
                         </div>
                     </template>
@@ -63,19 +48,7 @@
                                     <el-icon size="14" color="#409EFF" style="cursor:help;margin-left:4px;vertical-align:middle;"><InfoFilled /></el-icon>
                                 </template>
                                 <div style="font-size:13px;line-height:2;">
-                                    <template v-if="[3,4].includes(typeId)">
-                                        <div><b>持续时间：</b>{{ getCfg(list).durationMin }} 分钟</div>
-                                        <div><b>倍数上限：</b>{{ getCfg(list).multiUpper }}</div>
-                                        <div><b>倍数下限：</b>{{ getCfg(list).multiLower }}</div>
-                                    </template>
-                                    <template v-if="[5].includes(typeId)">
-                                        <div><b>比例阈值：</b>{{ getCfg(list).ratioLimit }}</div>
-                                    </template>
-                                    <template v-if="[6,7].includes(typeId)">
-                                        <div><b>比例阈值：</b>{{ getCfg(list).ratioLimit }}</div>
-                                        <div><b>连续告警倍数：</b>{{ getCfg(list).ratioMulti }}</div>
-                                        <div><b>告警窗口：</b>{{ getCfg(list).alertWindow }} 分钟</div>
-                                    </template>
+                                    <div><b>检查间隔：</b>{{ getCfg(list).alertInterval }} 分钟</div>
                                 </div>
                             </el-popover>
                         </div>
@@ -115,7 +88,6 @@
                                     每 {{ globalQAConfig.syncIntervalMin }} 分钟 · 抓 {{ globalQAConfig.syncPageSize }} 条
                                 </span>
                             </el-tooltip>
-                            <!-- 同步起始时间 -->
                             <el-tooltip placement="bottom"
                                 :content="globalQAConfig.syncStartTime ? '已在质检配置中设定，子页面不支持修改' : '只导入告警时间 ≥ 此时间的数据，留空 = 不过滤'">
                                 <el-date-picker
@@ -150,7 +122,6 @@
                             </el-tooltip>
                         </div>
                         <div class="sync-bar-right">
-                            <!-- Per-list RC URL override -->
                             <el-tooltip placement="top">
                                 <template #content>
                                     <div style="max-width:280px; line-height:1.7;">
@@ -169,9 +140,9 @@
                                 @change="saveList(list, false)"
                             >
                                 <el-option
-                                    v-for="(env, idx) in rcEnvOptions"
+                                    v-for="env in rcEnvOptions"
                                     :key="env.rcBaseUrl"
-                                    :label="idx === 0 ? `${env.name}（默认）  (${env.rcBaseUrl})` : `${env.name}  (${env.rcBaseUrl})`"
+                                    :label="`${env.name}  (${env.rcBaseUrl})`"
                                     :value="env.rcBaseUrl"
                                 />
                                 <template v-if="rcEnvOptions.length === 0">
@@ -239,7 +210,7 @@
                         </el-tag>
                     </div>
 
-                    <!-- 操作栏（批量操作 + 时间筛选 合并一行） -->
+                    <!-- 操作栏 -->
                     <div v-if="list.records && list.records.length > 0" class="action-bar">
                         <div class="action-bar-left">
                             <el-dropdown trigger="click" size="small">
@@ -266,6 +237,25 @@
                             </template>
                         </div>
                         <div class="action-bar-right">
+                            <!-- 优惠类型筛选（仅过滤展示行，逻辑仍按完整 records 的绝对索引计算） -->
+                            <span class="filter-label">优惠类型：</span>
+                            <el-select
+                                v-model="list._rewardTypeFilter"
+                                size="small"
+                                style="width:200px;"
+                                placeholder="全部"
+                                clearable
+                                @change="list._currentPage = 1"
+                            >
+                                <el-option label="全部" value="" />
+                                <el-option
+                                    v-for="t in rewardTypeOptions(list)"
+                                    :key="t"
+                                    :label="t"
+                                    :value="t"
+                                />
+                            </el-select>
+                            <el-divider direction="vertical" />
                             <el-date-picker
                                 v-model="list._dateRange"
                                 type="datetimerange"
@@ -281,7 +271,7 @@
                                 @change="list._currentPage = 1"
                                 clearable
                             />
-                            <span v-if="list._dateRange" class="filter-count">
+                            <span v-if="list._dateRange || list._rewardTypeFilter" class="filter-count">
                                 {{ getFilteredRecords(list).length }} / {{ list.records.length }} 条
                             </span>
                         </div>
@@ -294,18 +284,20 @@
                         style="width: 100%"
                         size="small"
                         :row-key="(row) => row.alertId || list.records.indexOf(row)"
-                        :row-class-name="({ row }) => getRowClass(row, list.records.indexOf(row), list)"
+                        :row-class-name="({ row }) => getRowClassName(list.records.indexOf(row), list.records, getCfg(list))"
                         @selection-change="(rows) => list._selectedRows = rows">
 
                         <el-table-column type="selection" width="40" fixed="left" reserve-selection />
 
-                        <el-table-column label="告警单号" min-width="140">
+                        <!-- 1. 告警单号 -->
+                        <el-table-column label="告警单号" min-width="120">
                             <template #default="scope">
                                 <el-input v-model="scope.row.alertId" size="small" />
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="告警时间" min-width="200">
+                        <!-- 2. 告警时间 -->
+                        <el-table-column label="告警时间" min-width="160">
                             <template #default="scope">
                                 <el-date-picker v-model="scope.row.alertTime" type="datetime"
                                     format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss"
@@ -313,184 +305,92 @@
                             </template>
                         </el-table-column>
 
-                        <el-table-column :label="val1Label" min-width="120">
+                        <!-- 3. 优惠类型 -->
+                        <el-table-column label="优惠类型" min-width="180">
                             <template #default="scope">
-                                <span v-if="scope.row.val1 === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="scope.row.val1" :controls="false" size="small" style="width:100%" />
+                                <el-input v-model="scope.row.rewardType" size="small" placeholder="ALL / 活动名" />
                             </template>
                         </el-table-column>
 
-                        <!-- val2 — 标准类型 (typeId 1-7) -->
-                        <el-table-column v-if="typeId !== 9" :label="val2Label" min-width="120">
+                        <!-- 4. 今日累计优惠 -->
+                        <el-table-column label="今日累计优惠" min-width="120">
                             <template #default="scope">
-                                <span v-if="scope.row.val2 === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="scope.row.val2" :controls="false" size="small" style="width:100%" />
+                                <span v-if="scope.row.todayTotal === null" class="field-missing">⚠ 未抓到</span>
+                                <el-input-number v-else v-model="scope.row.todayTotal" :controls="false" size="small" style="width:100%" />
                             </template>
                         </el-table-column>
 
-                        <!-- 存提差环比专属列 (typeId 9) -->
-                        <template v-if="typeId === 9">
-                            <el-table-column label="当前存款额" min-width="110">
-                                <template #default="scope">
-                                    <span v-if="scope.row.depositAmount === null" class="field-missing">⚠ 未抓到</span>
-                                    <el-input-number v-else v-model="scope.row.depositAmount" :controls="false" size="small" style="width:100%" />
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="当前提款额" min-width="110">
-                                <template #default="scope">
-                                    <span v-if="scope.row.withdrawalAmount === null" class="field-missing">⚠ 未抓到</span>
-                                    <el-input-number v-else v-model="scope.row.withdrawalAmount" :controls="false" size="small" style="width:100%" />
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="Last 存提差" min-width="110">
-                                <template #default="scope">
-                                    <span v-if="scope.row.lastNetflowAmount === null" class="field-missing">⚠ 未抓到</span>
-                                    <el-input-number v-else v-model="scope.row.lastNetflowAmount" :controls="false" size="small" style="width:100%" />
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="Last 存款额" min-width="110">
-                                <template #default="scope">
-                                    <span v-if="scope.row.lastDepositAmount === null" class="field-missing">⚠ 未抓到</span>
-                                    <el-input-number v-else v-model="scope.row.lastDepositAmount" :controls="false" size="small" style="width:100%" />
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="Last 提款额" min-width="110">
-                                <template #default="scope">
-                                    <span v-if="scope.row.lastWithdrawalAmount === null" class="field-missing">⚠ 未抓到</span>
-                                    <el-input-number v-else v-model="scope.row.lastWithdrawalAmount" :controls="false" size="small" style="width:100%" />
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="下降金额" width="100" align="right">
-                                <template #default="scope">
-                                    <span :style="{ color: nfCalcDecline(scope.row) >= nfGetY(getCfg(list)) ? 'var(--qa-fail)' : '#606266', fontWeight: 600 }">
-                                        {{ nfCalcDecline(scope.row).toLocaleString() }}
-                                    </span>
-                                </template>
-                            </el-table-column>
-                        </template>
-
-                        <!-- 比值列 (typeId 5/6/7) -->
-                        <el-table-column v-if="[5, 6, 7].includes(typeId)" :label="ratioLabel" width="95" align="center">
+                        <!-- 5. 前7天平均×倍数 -->
+                        <el-table-column label="前7天平均" min-width="130">
                             <template #default="scope">
-                                {{ scope.row.val2 ? (scope.row.val1 / scope.row.val2).toFixed(4) : 0 }}
+                                <span v-if="scope.row.avg7 === null" class="field-missing">⚠ 未抓到</span>
+                                <el-input-number v-else v-model="scope.row.avg7" :controls="false" size="small" style="width:100%" />
                             </template>
                         </el-table-column>
 
-                        <!-- 普通告警类型 (typeId 1/2/3/4) -->
-                        <el-table-column v-if="[1, 2, 3, 4].includes(typeId)" label="普通告警类型" min-width="110">
+                        <!-- 6. 前30天平均×倍数 -->
+                        <el-table-column label="前30天平均" min-width="130">
                             <template #default="scope">
-                                <el-select v-model="scope.row.normalType" size="small">
-                                    <el-option label="上升" value="上升" />
-                                    <el-option label="下降" value="下降" />
-                                </el-select>
+                                <span v-if="scope.row.avg30 === null" class="field-missing">⚠ 未抓到</span>
+                                <el-input-number v-else v-model="scope.row.avg30" :controls="false" size="small" style="width:100%" />
                             </template>
                         </el-table-column>
 
-                        <!-- 普通告警结果 (typeId 1-7) / 告警结果 (typeId 9) -->
-                        <el-table-column width="115" align="center">
+                        <!-- 7. 告警结果 -->
+                        <el-table-column width="140" align="center">
                             <template #header>
-                                <el-tooltip v-if="typeId !== 9" placement="top">
-                                    <template #content>
-                                        <div v-if="[1,2,3,4].includes(typeId)" style="line-height:1.8;">
-                                            <div>上升：{{ val1Label }} &gt; {{ val2Label }} → <b>TRUE</b></div>
-                                            <div>下降：{{ val1Label }} &lt; {{ val2Label }} → <b>TRUE</b></div>
-                                        </div>
-                                        <div v-else style="line-height:1.8;">
-                                            <div>{{ ratioLabel }} &gt; 配置比例阈值 → <b>TRUE</b></div>
-                                        </div>
-                                    </template>
-                                    <span class="tip-header">普通告警结果&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
-                                </el-tooltip>
-                                <el-tooltip v-else placement="top">
+                                <el-tooltip placement="top">
                                     <template #content>
                                         <div style="line-height:1.8;">
-                                            <div>下降金额 = Last存提差 − 当前存提差</div>
-                                            <div>下降金额 ≥ Y（关联配置中的下降阈值）→ <b>TRUE</b></div>
-                                            <div style="margin-top:6px; color:#bbb; font-size:12px;">
-                                                间隔检查：当前告警与前一条告警时间差 &lt; X 分钟（检查间隔）→ <b style="color:#F56C6C;">FALSE</b>
-                                            </div>
+                                            <div>每日只触发一次：当日该优惠类型已有更早告警 → <b style="color:#F56C6C;">FALSE</b></div>
+                                            <div style="margin-top:4px;">条件2：今日累计 ≥ 前7天平均×倍数 且 ≥ 前30天平均×倍数 → <b>TRUE</b></div>
+                                            <div style="margin-top:4px;">两个对比值都缺 → 数据不足，不对比</div>
                                         </div>
                                     </template>
                                     <span class="tip-header">告警结果&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
                                 </el-tooltip>
                             </template>
                             <template #default="scope">
-                                <el-tag v-if="typeId !== 9 && getNormalResult(scope.row, list) === 'NO_CFG'" size="small" type="warning">⚠ 未配置</el-tag>
-                                <el-tag v-else-if="typeId !== 9" :type="getNormalResult(scope.row, list) === 'TRUE' ? 'success' : 'danger'" size="small">
-                                    {{ getNormalResult(scope.row, list) }}
+                                <template v-if="calcNormalResult(list.records.indexOf(scope.row), list.records, getCfg(list)) === null">
+                                    <span class="field-missing">⚠ 数据不足/未抓到</span>
+                                </template>
+                                <el-tag v-else :type="calcNormalResult(list.records.indexOf(scope.row), list.records, getCfg(list)) === 'TRUE' ? 'success' : 'danger'" size="small">
+                                    {{ calcNormalResult(list.records.indexOf(scope.row), list.records, getCfg(list)) }}
                                 </el-tag>
-                                <el-tag v-else :type="nfCalcNormalResult(list.records.indexOf(scope.row), list.records, getCfg(list)) === 'TRUE' ? 'success' : 'danger'" size="small">
-                                    {{ nfCalcNormalResult(list.records.indexOf(scope.row), list.records, getCfg(list)) }}
-                                </el-tag>
                             </template>
                         </el-table-column>
 
-                        <!-- 连续告警类型 (typeId 3/4) -->
-                        <el-table-column v-if="[3, 4].includes(typeId)" label="连续告警类型" min-width="140">
-                            <template #default="scope">
-                                <el-select v-model="scope.row.contType" size="small">
-                                    <el-option v-for="t in contTypeOptions" :key="t" :label="t" :value="t" />
-                                </el-select>
-                            </template>
-                        </el-table-column>
-
-                        <!-- 连续告警结果 (typeId 3/4/5/6/7) -->
-                        <el-table-column v-if="[3, 4, 5, 6, 7].includes(typeId)" width="115" align="center">
-                            <template #header>
-                                <el-tooltip placement="top">
-                                    <template #content>
-                                        <div v-if="[3,4].includes(typeId)" style="line-height:1.8;">
-                                            <div>前30分钟无告警 / 下降转上升 / 上升转下降 → <b>TRUE</b></div>
-                                            <div>上升恶化：当前提款额 ≥ 上一条提款额 × 倍数上限 → <b>TRUE</b></div>
-                                            <div>下降恶化：当前提款额 ≤ 上一条提款额 × 倍数下限 → <b>TRUE</b></div>
-                                            <div style="color:#bbb; margin-top:4px; font-size:12px;">时间差 ≥ 持续时间（分钟）→ 不检查连续告警，显示 -</div>
-                                        </div>
-                                        <div v-else style="line-height:1.8;">
-                                            <div>当前 {{ ratioLabel }} ≥ 上一条 {{ ratioLabel }} + 连续告警倍数 → <b>TRUE</b></div>
-                                            <div style="color:#bbb; margin-top:4px; font-size:12px;">时间差 ≥ 告警窗口（分钟）→ 不检查连续告警，显示 -</div>
-                                        </div>
-                                    </template>
-                                    <span class="tip-header">连续告警结果&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
-                                </el-tooltip>
-                            </template>
-                            <template #default="scope">
-                                <b :style="{ color: getContResultColor(getContResult(list.records.indexOf(scope.row), list)) }">
-                                    {{ getContResult(list.records.indexOf(scope.row), list) }}
-                                </b>
-                            </template>
-                        </el-table-column>
-
-                        <!-- 风控系统判断 -->
-                        <el-table-column width="100" align="center">
-                            <template #header>风控系统判断</template>
+                        <!-- 8. 风控系统判断（只读，来自同步/导入的 RC 判断） -->
+                        <el-table-column label="风控系统判断" width="115" align="center">
                             <template #default="scope">
                                 <el-tag v-if="scope.row.devResult"
                                     :type="scope.row.devResult === 'TRUE' ? 'success' : 'danger'"
                                     size="small">
                                     {{ scope.row.devResult }}
                                 </el-tag>
+                                <span v-else class="field-missing">—</span>
                             </template>
                         </el-table-column>
 
-                        <!-- 逻辑一致 -->
-                        <el-table-column width="80" align="center">
-                            <template #header>逻辑一致</template>
+                        <!-- 9. 逻辑一致 -->
+                        <el-table-column label="逻辑一致" width="90" align="center">
                             <template #default="scope">
-                                <el-tag v-if="!scope.row.devResult" size="small" type="info">待判断</el-tag>
-                                <el-tag
-                                    v-else-if="checkLogicMatch(scope.row, list.records.indexOf(scope.row), list)"
-                                    size="small" type="success">✓ 一致</el-tag>
-                                <el-tag v-else size="small" type="danger">✗ 异常</el-tag>
+                                <el-tag v-if="scope.row.ignored" type="info" size="small">—</el-tag>
+                                <template v-else-if="scope.row.devResult">
+                                    <el-tag v-if="calcLogicMatch(list.records.indexOf(scope.row), list.records, getCfg(list))" type="success" size="small">✓ 一致</el-tag>
+                                    <el-tag v-else type="danger" size="small">✗ 异常</el-tag>
+                                </template>
+                                <el-tag v-else type="info" size="small">待判断</el-tag>
                             </template>
                         </el-table-column>
 
-                        <!-- 操作 -->
+                        <!-- 10. 操作 -->
                         <el-table-column label="操作" width="110" align="center" fixed="right">
                             <template #default="scope">
                                 <el-button
                                     :type="scope.row.ignored ? 'info' : 'warning'"
                                     link
-                                    @click="scope.row.ignored = !scope.row.ignored; saveList(list, false)">
+                                    @click="scope.row.ignored = !scope.row.ignored">
                                     {{ scope.row.ignored ? '恢复' : '忽略' }}
                                 </el-button>
                                 <el-button type="danger" link
@@ -501,7 +401,7 @@
                         </el-table-column>
                     </el-table>
 
-                    <!-- 分页（有数据时始终显示） -->
+                    <!-- 分页 -->
                     <div v-if="list.records.length > 0" class="pagination-bar">
                         <el-pagination
                             v-model:current-page="list._currentPage"
@@ -512,7 +412,6 @@
                             background
                             @size-change="list._currentPage = 1"
                         />
-                        <!-- 手动输入每页条数 -->
                         <div class="page-size-custom">
                             <span class="page-size-label">自定义：</span>
                             <el-input-number
@@ -534,15 +433,13 @@
                 <el-icon color="#409EFF" size="20"><InfoFilled /></el-icon>
                 <div>
                     Excel 中共发现 <b style="color:#409EFF; font-size:16px;">{{ importRawExcelData.length }}</b> 条
-                    <b>{{ importTypeName }}</b> 数据<br />
+                    <b>{{ PAGE_TITLE }}</b> 数据<br />
                     <span style="color: var(--qa-subtext-color); font-size:12px;">
                         数据时间跨度：{{ importDataTimeMin }} 至 {{ importDataTimeMax }}
                     </span>
                 </div>
             </div>
-
             <el-divider style="margin: 16px 0;" />
-
             <el-form label-width="120px" style="margin-bottom: 8px;">
                 <el-form-item label="选择导入范围">
                     <el-date-picker
@@ -557,7 +454,6 @@
                     />
                 </el-form-item>
             </el-form>
-
             <div class="import-preview-count">
                 <el-icon size="18" :color="importFilteredCount > 0 ? '#409EFF' : 'var(--qa-fail)'"><InfoFilled /></el-icon>
                 <span>将导入</span>
@@ -569,7 +465,6 @@
                     已过滤 {{ importRawExcelData.length - importFilteredCount }} 条
                 </el-tag>
             </div>
-
             <template #footer>
                 <el-button @click="importDialogVisible = false">取消</el-button>
                 <el-button type="primary" :disabled="importFilteredCount === 0" @click="confirmImport">
@@ -581,48 +476,30 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, shallowRef, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, shallowRef, watch } from 'vue'
 import axios from 'axios'
-import { ElNotification, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
+import { ElNotification, ElMessageBox } from 'element-plus'
 import { CircleCheck, CircleClose, Plus, Edit, Check, Upload, InfoFilled, Warning, DocumentAdd, ArrowDown } from '@element-plus/icons-vue'
+import { filterByAlertType, getTimeRange } from '../logic/importMapper.js'
+import { PAGE_TITLES } from '../logic/alertTypes.js'
 
-import { ALERT_TYPE_MAP, PAGE_TITLES, TYPE_DISPLAY_NAMES, CONT_TYPE_OPTIONS, getVal1Label, getVal2Label, getRatioLabel } from '../logic/alertTypes.js'
-import { calcNormalResult, calcContResult, calcLogicMatch, getContResultColor } from '../logic/alertLogic.js'
-import { fmtDate, filterByAlertType, getTimeRange, mapExcelRows } from '../logic/importMapper.js'
 import {
-    calcDecline as nfCalcDecline,
-    calcNormalResult as nfCalcNormalResult,
-    calcLogicMatch as nfCalcLogicMatch,
-    getMatchCount as nfGetMatchCount,
-    getY as nfGetY,
-} from '../logic/netflowCompLogic.js'
+    calcNormalResult,
+    calcLogicMatch,
+    getMatchCount as yoyGetMatchCount,
+    getRowClass as yoyGetRowClass,
+} from '../logic/promoYoyLogic.js'
 
-const route = useRoute(), typeId = Number(route.params.id), API = 'http://localhost:3000/api'
-
-const pageTitle = computed(() => PAGE_TITLES[typeId])
-const val1Label = computed(() => getVal1Label(typeId))
-const val2Label = computed(() => getVal2Label(typeId))
-const ratioLabel = computed(() => getRatioLabel(typeId))
-const contTypeOptions = CONT_TYPE_OPTIONS
-
-// 每种告警类型对应的主题色
-const TYPE_COLORS = {
-    1: '#1677ff', 2: '#0958d9',
-    3: '#d46b08', 4: '#ad4e00',
-    5: '#389e0d',
-    6: '#531dab', 7: '#c41d7f',
-    9: '#2f54eb',
-}
-const typeColor = computed(() => TYPE_COLORS[typeId] || '#1677ff')
-const typeColorLight = computed(() => `${typeColor.value}18`)
+const TYPE_ID = 11
+const API = 'http://localhost:3000/api'
+const PAGE_TITLE = PAGE_TITLES[TYPE_ID]
+const ALERT_TYPE = 'reward-cumulative'
 
 const allLists = ref([]), activeLists = ref([]), availableConfigs = ref([])
 const isPageLoading = ref(true)
 
-// ─── 折叠面板状态持久化 ───────────────────────────────────────────────────────
-const COLLAPSE_KEY = `rcs_collapse_${typeId}`
+const COLLAPSE_KEY = `rcs_collapse_${TYPE_ID}`
 const saveCollapseState = (ids) => {
     try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(ids)) } catch {}
 }
@@ -630,25 +507,21 @@ const loadCollapseState = () => {
     try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || 'null') } catch { return null }
 }
 
-// ─── 全局同步服务状态 ─────────────────────────────────────────────────────────
 const globalSyncStatus = ref({ isAlive: false, updatedAt: null, transactionCount: 0, betCount: 0 })
 const globalQAConfig   = ref({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null })
-const rcEnvOptions     = ref([])   // 来自质检配置的 RC 地址列表
-const syncTimers    = new Map()   // listId → intervalId
-const cooldownEnds  = new Map()   // normUrl → timestamp when cooldown expires
+const rcEnvOptions     = ref([])
+const syncTimers    = new Map()
+const cooldownEnds  = new Map()
 const COOLDOWN_MS   = 30_000
-const _tick         = shallowRef(0)  // increments every second to force cooldown re-render
+const _tick         = shallowRef(0)
 let   _tickTimer    = null
 
-/** Returns seconds remaining in cooldown for the given URL (0 if not in cooldown).
- *  Reads _tick.value so Vue re-evaluates this every second. */
 const cooldownSec = (url) => {
-    void _tick.value  // reactive dependency
+    void _tick.value
     const exp = cooldownEnds.get((url || '').trim().toLowerCase().replace(/\/+$/, '') || 'default')
     if (!exp) return 0
     return Math.max(0, Math.ceil((exp - Date.now()) / 1000))
 }
-/** Mark URL as entering cooldown (called after sync request accepted) */
 const markCooldown = (url) => {
     const key = (url || '').trim().toLowerCase().replace(/\/+$/, '') || 'default'
     cooldownEnds.set(key, Date.now() + COOLDOWN_MS)
@@ -664,17 +537,10 @@ const fetchQAConfig = async () => {
     } catch { /* use defaults */ }
 }
 
-// ─── localStorage 持久化：只保存开关状态（间隔/数量由质检配置决定）───────────
 const SYNC_STORAGE_KEY = (id) => `rcs_sync_${id}`
-
 const saveSyncState = (list) => {
-    try {
-        localStorage.setItem(SYNC_STORAGE_KEY(list._id), JSON.stringify({
-            enabled: list._syncEnabled
-        }))
-    } catch { /* 忽略隐私模式下的存储错误 */ }
+    try { localStorage.setItem(SYNC_STORAGE_KEY(list._id), JSON.stringify({ enabled: list._syncEnabled })) } catch {}
 }
-
 const restoreSyncState = (list) => {
     try {
         const raw = localStorage.getItem(SYNC_STORAGE_KEY(list._id))
@@ -682,8 +548,8 @@ const restoreSyncState = (list) => {
         const { enabled } = JSON.parse(raw)
         if (!enabled || !list.rcBaseUrl) return
         list._syncEnabled = true
-        startAutoSync(list, true)  // fromRestore=true：读缓存，不触发新同步，无 8s 等待
-    } catch { /* 损坏的存储数据直接忽略 */ }
+        startAutoSync(list, true)
+    } catch {}
 }
 
 const fetchSyncStatus = async (rcBaseUrl = '') => {
@@ -696,37 +562,25 @@ const fetchSyncStatus = async (rcBaseUrl = '') => {
     }
 }
 
-/** 对指定列表执行一次同步并自动追加新数据 */
-/**
- * @param {boolean} isManual    true = 用户手动点击触发
- * @param {boolean} skipRequest true = 跳过 request-sync，直接读缓存（页面恢复时用）
- */
 const runSync = async (list, isManual = false, skipRequest = false) => {
     if (list._isSyncingNow) return
     list._isSyncingNow = true
     try {
-        // skipRequest=true 时（页面恢复/冷却），直接读缓存，不触发新同步
         let waitMs = 0
         if (!skipRequest) {
             const syncResp = await axios.post(`${API}/request-sync`, {
                 pageSize:  globalQAConfig.value.syncPageSize || 200,
                 rcBaseUrl: list.rcBaseUrl || ''
             })
-            if (syncResp.data?.skipped) {
-                // 被冷却限流：不触发新同步，但仍读一次缓存（可能已有数据）
-                // waitMs 保持 0，直接进入 cache 轮询
-            } else {
+            if (!syncResp.data?.skipped) {
                 markCooldown(list.rcBaseUrl || '')
-                // 等待 rc_sync_service.py 点击查询并推送数据（约 8s）
                 waitMs = 8000
             }
         }
-
         let fetched = [], rawCount = 0
         if (waitMs > 0) await new Promise(r => setTimeout(r, waitMs))
-
         for (let attempt = 0; attempt < 5; attempt++) {
-            const res = await axios.get(`${API}/sync-cache/${typeId}`, {
+            const res = await axios.get(`${API}/sync-cache/${TYPE_ID}`, {
                 params: { url: list.rcBaseUrl || '' }
             })
             fetched  = res.data.data     || []
@@ -734,23 +588,15 @@ const runSync = async (list, isManual = false, skipRequest = false) => {
             if (fetched.length > 0 || attempt === 4) break
             await new Promise(r => setTimeout(r, skipRequest ? 500 : 3000))
         }
-
-        // 起始时间过滤：列表级时间优先，fallback 全局配置
         const startTime = globalQAConfig.value.syncStartTime || list.syncStartTime
         if (startTime) {
             const cutoff = new Date(startTime).getTime()
-            const before = fetched.length
             fetched = fetched.filter(r => {
                 const t = new Date(r.alertTime).getTime()
                 return !isNaN(t) && t >= cutoff
             })
-            if (fetched.length < before)
-                console.log(`[syncStartTime] 过滤掉 ${before - fetched.length} 条早于 ${startTime} 的数据`)
         }
-
-        const existingIds = new Set(
-            list.records.map(r => r.alertId?.toString().trim()).filter(Boolean)
-        )
+        const existingIds = new Set(list.records.map(r => r.alertId?.toString().trim()).filter(Boolean))
         const newOnes = fetched.filter(r => {
             const fid = r.alertId?.toString().trim()
             return !fid || !existingIds.has(fid)
@@ -761,30 +607,17 @@ const runSync = async (list, isManual = false, skipRequest = false) => {
             list._currentPage = 1
             await saveList(list, false)
             ElNotification.success({
-                title: `${pageTitle.value} · ${list.listName}`,
+                title: `${PAGE_TITLE} · ${list.listName}`,
                 message: `${isManual ? '手动' : '自动'}同步：新增 ${newOnes.length} 条（已保存）`,
-                position: 'bottom-right',
-                duration: 4000
+                position: 'bottom-right', duration: 4000
             })
         } else {
             if (rawCount === 0 && isManual) {
-                ElNotification.warning({
-                    title: '暂无数据',
-                    message: '缓存为空，请确认 rc_sync_service.py 正在运行，并已完成登录',
-                    position: 'bottom-right', duration: 5000
-                })
+                ElNotification.warning({ title: '暂无数据', message: '缓存为空，请确认 rc_sync_service.py 正在运行，并已完成登录', position: 'bottom-right', duration: 5000 })
             } else if (fetched.length === 0 && rawCount > 0) {
-                ElNotification.warning({
-                    title: `${pageTitle.value} · ${list.listName} — 无匹配数据`,
-                    message: `缓存共 ${rawCount} 条原始数据，但无匹配当前告警类型的记录。请确认 RC 地址与告警类型是否对应。`,
-                    position: 'bottom-right', duration: 7000
-                })
+                ElNotification.warning({ title: `${PAGE_TITLE} · ${list.listName} — 无匹配数据`, message: `缓存共 ${rawCount} 条原始数据，但无匹配当前告警类型的记录。`, position: 'bottom-right', duration: 7000 })
             } else if (isManual && fetched.length > 0) {
-                ElNotification.info({
-                    title: `${pageTitle.value} · ${list.listName}`,
-                    message: `拉取到 ${fetched.length} 条，已全部在列表中（无新增）`,
-                    position: 'bottom-right', duration: 3000
-                })
+                ElNotification.info({ title: `${PAGE_TITLE} · ${list.listName}`, message: `拉取到 ${fetched.length} 条，已全部在列表中（无新增）`, position: 'bottom-right', duration: 3000 })
             }
         }
         await fetchSyncStatus()
@@ -795,51 +628,120 @@ const runSync = async (list, isManual = false, skipRequest = false) => {
     }
 }
 
-/**
- * 开启自动同步
- * @param {boolean} fromRestore true = 页面恢复时静默启动（读缓存，不弹「首次同步」提示）
- */
 const startAutoSync = async (list, fromRestore = false) => {
     if (!list.rcBaseUrl) {
         list._syncEnabled = false
-        ElNotification.warning({
-            title: '请先选择 RC 地址',
-            message: '必须为此列表选择对应的 RC 系统地址，才能开启风控自动同步',
-            position: 'bottom-right', duration: 4000
-        })
+        ElNotification.warning({ title: '请先选择 RC 地址', message: '必须为此列表选择对应的 RC 系统地址，才能开启风控自动同步', position: 'bottom-right', duration: 4000 })
         return
     }
     stopAutoSync(list)
     saveSyncState(list)
     await fetchSyncStatus()
-
     if (!fromRestore) {
-        ElNotification.info({
-            message: '正在进行首次同步，请稍候…',
-            position: 'bottom-right', duration: 3000
-        })
+        ElNotification.info({ message: '正在进行首次同步，请稍候…', position: 'bottom-right', duration: 3000 })
     }
-    // fromRestore=true → skipRequest=true：直接读缓存，不重复触发 request-sync，无 8s 等待
     await runSync(list, false, fromRestore)
-
     const ms = (globalQAConfig.value.syncIntervalMin || 1) * 60 * 1000
     const id = setInterval(() => runSync(list), ms)
     syncTimers.set(list._id, id)
 }
 
-/** 关闭自动同步 */
 const stopAutoSync = (list) => {
     if (syncTimers.has(list._id)) {
         clearInterval(syncTimers.get(list._id))
         syncTimers.delete(list._id)
     }
-    saveSyncState(list)           // 持久化：开关 OFF
+    saveSyncState(list)
 }
 
-/** 手动立即同步一次 */
 const manualSync = async (list) => {
     await fetchSyncStatus()
-    await runSync(list, true)   // isManual=true → 被限流时显示提示
+    await runSync(list, true)
+}
+
+// ─── Excel import ────────────────────────────────────────────────────────────
+const importDialogVisible = ref(false)
+const importRawExcelData  = ref([])
+const importTargetList    = ref(null)
+const importTimeRange     = ref(null)
+
+const importDataTimeMin = computed(() => importRawExcelData.value.length
+    ? importRawExcelData.value.map(r => r.alertGeneratedTime || '').filter(Boolean).sort()[0] || ''
+    : '')
+const importDataTimeMax = computed(() => importRawExcelData.value.length
+    ? [...importRawExcelData.value.map(r => r.alertGeneratedTime || '').filter(Boolean)].sort().at(-1) || ''
+    : '')
+const importFilteredCount = computed(() => {
+    if (!importRawExcelData.value.length) return 0
+    if (!importTimeRange.value?.[0] || !importTimeRange.value?.[1]) return importRawExcelData.value.length
+    const s = new Date(importTimeRange.value[0]).getTime()
+    const e = new Date(importTimeRange.value[1]).getTime()
+    return importRawExcelData.value.filter(r => {
+        const t = new Date(r.alertGeneratedTime).getTime()
+        return !isNaN(t) && t >= s && t <= e
+    }).length
+})
+
+// 优惠同比记录映射（自校验：阈值取自记录，不依赖配置倍数）
+const toNum = (v) => (v === null || v === undefined || v === '') ? null : Number(v)
+const mapRewardRows = (rows) => rows.map(r => ({
+    alertId:     r.alertNumber        || '',
+    alertTime:   r.alertGeneratedTime || '',
+    rewardType:  String(r.rewardType ?? r['meta.rewardType'] ?? '') || '',
+    todayTotal:  toNum(r.todayTotal  ?? r['meta.todayTotal']),
+    avg7:  toNum(r.avg7  ?? r['meta.avg7']),
+    avg30: toNum(r.avg30 ?? r['meta.avg30']),
+    devResult:   String(r.alertNumber || '').trim() ? 'TRUE' : '',
+    ignored:     false,
+}))
+
+const handleImportPreview = (file, list) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+        try {
+            const wb = XLSX.read(e.target.result, { type: 'binary' })
+            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
+            const filtered = filterByAlertType(json, ALERT_TYPE)
+            if (filtered.length === 0) {
+                return ElNotification.warning({
+                    title: '没有匹配数据',
+                    message: `Excel 中没有找到 alertType = "${ALERT_TYPE}" 的数据`,
+                    position: 'bottom-right'
+                })
+            }
+            const [minTime, maxTime] = getTimeRange(filtered)
+            importRawExcelData.value  = filtered
+            importTargetList.value    = list
+            importTimeRange.value     = minTime && maxTime ? [minTime, maxTime] : null
+            importDialogVisible.value = true
+        } catch (err) {
+            console.error(err)
+            ElNotification.error({ title: '解析失败', message: 'Excel 读取失败，请确认文件格式正确', position: 'bottom-right' })
+        }
+    }
+    reader.readAsBinaryString(file.raw)
+}
+
+const confirmImport = () => {
+    const list = importTargetList.value
+    if (!list) return
+    let dataToImport = [...importRawExcelData.value]
+    if (importTimeRange.value?.[0] && importTimeRange.value?.[1]) {
+        const s = new Date(importTimeRange.value[0]).getTime()
+        const e = new Date(importTimeRange.value[1]).getTime()
+        dataToImport = dataToImport.filter(r => {
+            const t = new Date(r.alertGeneratedTime).getTime()
+            return !isNaN(t) && t >= s && t <= e
+        })
+    }
+    const mapped = mapRewardRows(dataToImport)
+    list.records.unshift(...mapped)
+    list._currentPage = 1
+    ElNotification.success({ title: '导入成功', message: `成功导入 ${mapped.length} 条${PAGE_TITLE}数据`, position: 'bottom-right' })
+    importDialogVisible.value = false
+    importRawExcelData.value  = []
+    importTargetList.value    = null
+    importTimeRange.value     = null
 }
 
 onBeforeUnmount(() => {
@@ -848,39 +750,13 @@ onBeforeUnmount(() => {
     if (_tickTimer) clearInterval(_tickTimer)
 })
 
-const importDialogVisible = ref(false)
-const importRawExcelData = ref([])
-const importTimeRange = ref(null)
-const importTargetList = ref(null)
-const importTypeName = computed(() => TYPE_DISPLAY_NAMES[typeId] || '')
-
-const importDataTimeMin = computed(() => {
-    const times = importRawExcelData.value.map(r => new Date(r.alertGeneratedTime).getTime()).filter(t => !isNaN(t))
-    return times.length ? fmtDate(new Date(Math.min(...times))) : '-'
-})
-const importDataTimeMax = computed(() => {
-    const times = importRawExcelData.value.map(r => new Date(r.alertGeneratedTime).getTime()).filter(t => !isNaN(t))
-    return times.length ? fmtDate(new Date(Math.max(...times))) : '-'
-})
-const importFilteredCount = computed(() => {
-    if (!importRawExcelData.value.length) return 0
-    if (!importTimeRange.value || !importTimeRange.value[0] || !importTimeRange.value[1]) return importRawExcelData.value.length
-    const startMs = new Date(importTimeRange.value[0]).getTime()
-    const endMs = new Date(importTimeRange.value[1]).getTime()
-    return importRawExcelData.value.filter(row => {
-        const t = new Date(row.alertGeneratedTime).getTime()
-        return !isNaN(t) && t >= startMs && t <= endMs
-    }).length
-})
-
 onMounted(async () => {
-    // 每秒 tick 一次，使冷却倒计时在按钮上实时更新
     _tickTimer = setInterval(() => { _tick.value++ }, 1000)
     isPageLoading.value = true
     try {
         const [cfg, list] = await Promise.all([
-            axios.get(`${API}/configs/${typeId}`),
-            axios.get(`${API}/test-lists/${typeId}`)
+            axios.get(`${API}/configs/${TYPE_ID}`),
+            axios.get(`${API}/test-lists/${TYPE_ID}`)
         ])
         availableConfigs.value = cfg.data
         allLists.value = list.data.map(l => ({
@@ -894,62 +770,68 @@ onMounted(async () => {
             _syncEnabled: false,
             _lastSyncAt: null,
             _isSyncingNow: false,
+            _isImportingSync: false, /* keep for saveList destructure compat */
             _dateRange: null,
+            _rewardTypeFilter: '',
+            _isEditingName: false,
         }))
-        // Restore collapse state from localStorage; default to first list open
         const savedCollapse = loadCollapseState()
         if (savedCollapse && savedCollapse.length > 0) {
-            // Only keep IDs that still exist
             activeLists.value = savedCollapse.filter(id => allLists.value.some(l => l._id === id))
         }
         if (activeLists.value.length === 0 && allLists.value.length > 0) {
             activeLists.value = [allLists.value[0]._id]
         }
-        // 清除失效的 configId（配置被删除但列表未更新时的兜底）
         const validIds = new Set(availableConfigs.value.map(c => String(c._id)))
-        for (const list of allLists.value) {
-            if (list.configId && !validIds.has(String(list.configId))) {
-                list.configId = null
-                axios.post(`${API}/test-lists`, { _id: list._id, typeId, configId: null }).catch(() => {})
+        for (const l of allLists.value) {
+            if (l.configId && !validIds.has(String(l.configId))) {
+                l.configId = null
+                axios.post(`${API}/test-lists`, { _id: l._id, typeId: TYPE_ID, configId: null }).catch(() => {})
             }
         }
-
         await Promise.all([fetchSyncStatus(), fetchQAConfig()])
-        // 恢复上次的同步开关状态（切换页面/刷新后重启定时器）
-        allLists.value.forEach(list => restoreSyncState(list))
+        allLists.value.forEach(l => restoreSyncState(l))
     } finally {
         isPageLoading.value = false
     }
 })
 
-// Save collapse state whenever user expands/collapses a list
 watch(activeLists, (ids) => saveCollapseState(ids), { deep: true })
 
-/** Returns records filtered by the selected time range */
-const getFilteredRecords = (list) => {
-    if (!list._dateRange || !list._dateRange[0]) return list.records
-    const startMs = new Date(list._dateRange[0]).getTime()
-    const endMs   = new Date(list._dateRange[1]).getTime()
-    return list.records.filter(r => {
-        if (!r.alertTime) return false
-        const t = new Date(r.alertTime).getTime()
-        return t >= startMs && t <= endMs
-    })
+// 当前列表中出现过的所有优惠类型（去重），用于筛选下拉
+const rewardTypeOptions = (list) => {
+    const set = new Set()
+    list.records.forEach(r => { if (r.rewardType) set.add(r.rewardType) })
+    return [...set]
 }
 
-/** Returns the slice of records for the current page (after date filter) */
+// 过滤展示行：日期范围 + 优惠类型（仅影响展示，不改变 records 顺序/绝对索引）
+const getFilteredRecords = (list) => {
+    let rows = list.records
+    if (list._dateRange && list._dateRange[0]) {
+        const startMs = new Date(list._dateRange[0]).getTime()
+        const endMs   = new Date(list._dateRange[1]).getTime()
+        rows = rows.filter(r => {
+            if (!r.alertTime) return false
+            const t = new Date(r.alertTime).getTime()
+            return t >= startMs && t <= endMs
+        })
+    }
+    if (list._rewardTypeFilter) {
+        rows = rows.filter(r => r.rewardType === list._rewardTypeFilter)
+    }
+    return rows
+}
+
 const getPagedRecords = (list) => {
     const filtered = getFilteredRecords(list)
     const start = (list._currentPage - 1) * list._pageSize
     return filtered.slice(start, start + list._pageSize)
 }
 
-/** Removes a record by absolute index and clamps the current page */
 const removeRecord = (list, absIdx) => {
     ElMessageBox.confirm('确定删除此条记录？', '删除确认', {
-        type: 'warning',
-        confirmButtonText: '删除',
-        cancelButtonText: '取消'
+        type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
     }).then(() => {
         list.records.splice(absIdx, 1)
         const maxPage = Math.max(1, Math.ceil(list.records.length / list._pageSize))
@@ -957,79 +839,40 @@ const removeRecord = (list, absIdx) => {
     }).catch(() => {})
 }
 
-/** Returns pass/fail counts across all records in a list */
-const getMatchCount = (list) => {
-    if (typeId === 9) return nfGetMatchCount(list.records, getCfg(list))
-    let pass = 0, fail = 0
-    list.records.forEach((row, index) => {
-        if (!row.devResult || row.ignored) return
-        checkLogicMatch(row, index, list) ? pass++ : fail++
-    })
-    return { pass, fail }
-}
+const getMatchCount = (list) => yoyGetMatchCount(list.records, getCfg(list))
 
-/** Returns a CSS class name for a table row based on logic match */
-const getRowClass = (row, absIdx, list) => {
-    if (row.ignored) return 'row-ignored'
-    if (!row.devResult) return ''
-    return checkLogicMatch(row, absIdx, list) ? '' : 'row-mismatch'
-}
+const getRowClassName = (absIdx, records, cfg) => yoyGetRowClass(absIdx, records, cfg)
 
-
-// ─── Vue wrappers around pure logic functions ────────────────────────────────
-
-/** Retrieves the linked config object for a list */
 const getCfg = (list) => availableConfigs.value.find(c => c._id === list.configId)
-
-/** Returns the normal alert result for a row in a given list */
-const getNormalResult = (row, list) => {
-    if (!getCfg(list)) return 'NO_CFG'
-    return calcNormalResult(row, getCfg(list), typeId)
-}
-
-/** Returns the continuous alert result for an absolute record index in a list */
-const getContResult = (absIdx, list) => calcContResult(absIdx, list.records, getCfg(list), typeId)
-
-/** Returns whether the QA result matches the RC system devResult */
-const checkLogicMatch = (row, absIdx, list) => {
-    if (typeId === 9) return nfCalcLogicMatch(absIdx, list.records, getCfg(list))
-    return calcLogicMatch(row, absIdx, list.records, getCfg(list), typeId)
-}
-
-// ─── List CRUD ───────────────────────────────────────────────────────────────
 
 const saveList = async (list, show) => {
     list._isSaving = true
     try {
         // eslint-disable-next-line no-unused-vars
         const { _tempName, _isSaving, _currentPage, _pageSize, _customPageSize, _isEditingName,
-                _selectedRows, _syncEnabled, _lastSyncAt, _isSyncingNow,
-                ...payload } = list
+                _selectedRows, _syncEnabled, _lastSyncAt, _isSyncingNow, _isImportingSync,
+                _dateRange, _rewardTypeFilter, ...payload } = list
         await axios.post(`${API}/test-lists`, payload)
         if (show) ElNotification.success({ message: '保存成功', position: 'bottom-right' })
     } finally { list._isSaving = false }
 }
 
 const addRow = (list) => {
-    if (typeId === 9) {
-        list.records.unshift({
-            alertId: '', alertTime: '',
-            val1: 0, depositAmount: 0, withdrawalAmount: 0,
-            lastNetflowAmount: 0, lastDepositAmount: 0, lastWithdrawalAmount: 0,
-            devResult: '', ignored: false,
-        })
-    } else {
-        list.records.unshift({ alertId: '', alertTime: '', val1: 0, val2: 0, normalType: '上升', contType: '前30分钟无告警', devResult: '' })
-    }
+    list.records.unshift({
+        alertId: '', alertTime: '', rewardType: '',
+        todayTotal: 0, avg7: 0, avg30: 0,
+        devResult: '', ignored: false,
+    })
     list._currentPage = 1
 }
 
 const createNewList = () => ElMessageBox.prompt('输入列表名').then(async ({ value }) => {
-    const res = await axios.post(`${API}/test-lists`, { typeId, listName: value, records: [] })
+    const res = await axios.post(`${API}/test-lists`, { typeId: TYPE_ID, listName: value, records: [] })
     allLists.value.push({
         ...res.data, _tempName: res.data.listName,
         _isSaving: false, _currentPage: 1, _pageSize: 30, _customPageSize: null, _selectedRows: [],
-        _syncEnabled: false, _lastSyncAt: null, _isSyncingNow: false
+        _syncEnabled: false, _lastSyncAt: null, _isSyncingNow: false, _isImportingSync: false, /* keep for saveList destructure compat */
+        _dateRange: null, _rewardTypeFilter: '', _isEditingName: false,
     })
 })
 
@@ -1041,53 +884,46 @@ const applyCustomPageSize = (list) => {
     list._customPageSize = null
 }
 
-// ── 批量操作（用对象引用匹配，避免空 alertId 误命中） ─────────────────────────
 const bulkIgnore = (list) => {
     const sel = new Set(list._selectedRows)
     list.records.forEach(r => { if (sel.has(r)) r.ignored = true })
     list._selectedRows = []
 }
-
 const bulkRestore = (list) => {
     const sel = new Set(list._selectedRows)
     list.records.forEach(r => { if (sel.has(r)) r.ignored = false })
     list._selectedRows = []
 }
-
 const bulkDelete = async (list) => {
     if (!list._selectedRows.length) return
     try {
-        await ElMessageBox.confirm(
-            `确认删除选中的 ${list._selectedRows.length} 条记录？`,
-            '批量删除', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
-        )
+        await ElMessageBox.confirm(`确认删除选中的 ${list._selectedRows.length} 条记录？`, '批量删除', {
+            type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
+        })
         const sel = new Set(list._selectedRows)
         list.records = list.records.filter(r => !sel.has(r))
         list._selectedRows = []
         const maxPage = Math.max(1, Math.ceil(list.records.length / list._pageSize))
         if (list._currentPage > maxPage) list._currentPage = maxPage
-    } catch { /* cancelled */ }
+    } catch {}
 }
 
-// ── 一键全部操作 ──────────────────────────────────────────────────────────────
 const allIgnore = async (list) => {
     try {
         await ElMessageBox.confirm(`确认忽略全部 ${list.records.length} 条记录？`, '一键忽略', {
             type: 'warning', confirmButtonText: '忽略全部', cancelButtonText: '取消'
         })
         list.records.forEach(r => { r.ignored = true })
-    } catch { /* cancelled */ }
+    } catch {}
 }
-
 const allRestore = async (list) => {
     try {
         await ElMessageBox.confirm(`确认恢复全部 ${list.records.length} 条记录？`, '一键恢复', {
             type: 'info', confirmButtonText: '恢复全部', cancelButtonText: '取消'
         })
         list.records.forEach(r => { r.ignored = false })
-    } catch { /* cancelled */ }
+    } catch {}
 }
-
 const allDelete = async (list) => {
     try {
         await ElMessageBox.confirm(`确认删除全部 ${list.records.length} 条记录？此操作不可撤销。`, '一键删除', {
@@ -1099,13 +935,12 @@ const allDelete = async (list) => {
         list._currentPage = 1
         await saveList(list, false)
         ElNotification.success({ message: '全部记录已删除', position: 'bottom-right' })
-    } catch { /* cancelled */ }
+    } catch {}
 }
 
 const removeList = (id) => ElMessageBox.confirm('确定删除此列表？', '删除确认', {
     type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
 }).then(async () => {
-    // 先停止该列表的同步定时器，避免 setInterval 悬挂
     const list = allLists.value.find(l => l._id === id)
     if (list) stopAutoSync(list)
     await axios.delete(`${API}/test-lists/${id}`)
@@ -1114,98 +949,13 @@ const removeList = (id) => ElMessageBox.confirm('确定删除此列表？', '删
 
 const startEditName = (l) => l._isEditingName = true
 const confirmEditName = (l) => { l.listName = l._tempName; l._isEditingName = false; saveList(l, false) }
-
-// ─── Excel import: preview ───────────────────────────────────────────────────
-
-/** Opens the time-range dialog after reading and filtering the Excel file */
-const handleImportPreview = (file, list) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-        try {
-            const workbook = XLSX.read(e.target.result, { type: 'binary' })
-            const sheet = workbook.Sheets[workbook.SheetNames[0]]
-            const json = XLSX.utils.sheet_to_json(sheet)
-            const targetAlertType = ALERT_TYPE_MAP[typeId]
-            const filtered = filterByAlertType(json, targetAlertType)
-
-            if (filtered.length === 0) {
-                return ElNotification.warning({
-                    title: '没有匹配数据',
-                    message: `Excel 中没有找到 alertType = "${targetAlertType}" 的数据`,
-                    position: 'bottom-right'
-                })
-            }
-
-            const [minTime, maxTime] = getTimeRange(filtered)
-            importRawExcelData.value = filtered
-            importTargetList.value = list
-            importTimeRange.value = minTime && maxTime ? [minTime, maxTime] : null
-            importDialogVisible.value = true
-        } catch (err) {
-            console.error(err)
-            ElNotification.error({ title: '解析失败', message: 'Excel 读取失败，请确认文件格式正确', position: 'bottom-right' })
-        }
-    }
-    reader.readAsBinaryString(file.raw)
-}
-
-// ─── Excel import: confirm ───────────────────────────────────────────────────
-
-/** Applies time-range filter, maps rows, and inserts records into the list */
-const confirmImport = () => {
-    const list = importTargetList.value
-    if (!list) return
-
-    const cfg = getCfg(list)
-    const durationMin = cfg?.durationMin ?? 30
-
-    let dataToImport = [...importRawExcelData.value]
-    if (importTimeRange.value && importTimeRange.value[0] && importTimeRange.value[1]) {
-        const startMs = new Date(importTimeRange.value[0]).getTime()
-        const endMs = new Date(importTimeRange.value[1]).getTime()
-        dataToImport = dataToImport.filter(row => {
-            const t = new Date(row.alertGeneratedTime).getTime()
-            return !isNaN(t) && t >= startMs && t <= endMs
-        })
-    }
-
-    const mappedData = mapExcelRows(dataToImport, typeId, durationMin)
-
-    list.records.unshift(...mappedData)
-    list._currentPage = 1
-
-    ElNotification.success({
-        title: '导入成功',
-        message: `成功导入 ${mappedData.length} 条 ${pageTitle.value} 数据`,
-        position: 'bottom-right'
-    })
-
-    importDialogVisible.value = false
-    importRawExcelData.value = []
-    importTargetList.value = null
-    importTimeRange.value = null
-}
 </script>
 
 <style scoped>
 .main-card { border-radius: 8px; }
 
-.header-title-wrapper { display: flex; align-items: center; width: 100%; gap: 6px; padding-right: 12px; }
-.header-title { font-weight: 700; color: var(--qa-heading-color); font-size: 14px; }
-
-/* ── 列表状态 badge ──────────────────────────────────────────────────────── */
-.list-status-badge {
-    display: inline-flex;
-    align-items: center;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 10px;
-    border-radius: 20px;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-.badge-fail  { background: #fff1f0; color: #ff4d4f; border: 1px solid #ffa39e; }
-.badge-empty { background: #f5f5f5; color: #bfbfbf; border: 1px solid #e8eaed; font-weight: 400; }
+.header-title-wrapper { display: flex; align-items: center; width: 100%; }
+.header-title { font-weight: bold; color: var(--qa-heading-color); }
 
 .control-panel {
     background: var(--qa-control-panel-bg);
@@ -1214,8 +964,11 @@ const confirmImport = () => {
     display: flex;
     justify-content: space-between;
     margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
 }
-.panel-right { display: flex; gap: 8px; }
+.panel-left  { display: flex; align-items: center; gap: 8px; }
+.panel-right { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .stats-bar {
     display: flex;
@@ -1250,25 +1003,13 @@ const confirmImport = () => {
 .action-bar {
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px; padding: 6px 10px; margin-bottom: 6px;
-    background: #f7f8fa; border: 1px solid #eaecef;
+    background: #fdf6ec; border: 1px solid #faecd8;
     border-radius: 6px; font-size: 13px; flex-wrap: wrap;
 }
 .action-bar-left  { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .action-bar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.filter-label { font-size: 12px; color: #909399; white-space: nowrap; }
 .filter-count { font-size: 12px; color: #909399; white-space: nowrap; }
-
-.bulk-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    margin-bottom: 6px;
-    background: #fdf6ec;
-    border: 1px solid #faecd8;
-    border-radius: 6px;
-    font-size: 13px;
-}
-.bulk-label { color: #909399; font-size: 12px; }
 .bulk-count { color: #606266; }
 
 .pagination-bar {
@@ -1279,38 +1020,8 @@ const confirmImport = () => {
     margin-top: 12px;
     padding: 4px 0;
 }
-.page-size-custom {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    flex-shrink: 0;
-}
-.page-size-label {
-    font-size: 12px;
-    color: var(--qa-subtext-color);
-    white-space: nowrap;
-}
-
-.import-info-box {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 14px 16px;
-    background: var(--qa-import-info-bg);
-    border-radius: 8px;
-    font-size: 14px;
-    line-height: 1.8;
-}
-.import-preview-count {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background: var(--qa-import-preview-bg);
-    border-radius: 6px;
-    font-size: 14px;
-    color: #606266;
-}
+.page-size-custom { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.page-size-label { font-size: 12px; color: var(--qa-subtext-color); white-space: nowrap; }
 
 /* ── 同步控制栏 ─────────────────────────────────────────────────────────────── */
 .sync-bar {
@@ -1324,138 +1035,53 @@ const confirmImport = () => {
     border-radius: 6px;
     font-size: 13px;
     gap: 12px;
+    flex-wrap: wrap;
 }
-.sync-bar-active {
-    background: #f0f9eb;
-    border-color: var(--qa-stats-pass-border);
-}
+.sync-bar-active { background: #f0f9eb; border-color: var(--qa-stats-pass-border); }
 .sync-bar-left  { display: flex; align-items: center; gap: 10px; }
 .sync-bar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 .sync-toggle-label { font-size: 13px; color: #606266; }
 .sync-toggle-label.label-on { color: var(--qa-pass); font-weight: 600; }
-
 .sync-cfg-hint {
-    font-size: 12px;
-    color: var(--qa-subtext-color);
-    background: #f0f2f5;
-    padding: 2px 8px;
-    border-radius: 10px;
-    cursor: default;
-    white-space: nowrap;
+    font-size: 12px; color: var(--qa-subtext-color);
+    background: #f0f2f5; padding: 2px 8px; border-radius: 10px;
+    cursor: default; white-space: nowrap;
 }
-
 .sync-status-on  { color: var(--qa-pass); }
 .sync-status-off { color: #E6A23C; }
 .sync-time { color: var(--qa-subtext-color); margin-left: 6px; }
-.sync-url-label {
-    font-size: 12px;
-    color: var(--qa-subtext-color);
-    white-space: nowrap;
-    cursor: help;
-}
+.sync-url-label { font-size: 12px; color: var(--qa-subtext-color); white-space: nowrap; cursor: help; }
 
-:deep(.row-mismatch) {
-    background-color: var(--qa-row-mismatch-bg) !important;
-}
-:deep(.row-mismatch:hover > td.el-table__cell) {
-    background-color: var(--qa-row-mismatch-hover) !important;
-}
+:deep(.row-mismatch) { background-color: var(--qa-row-mismatch-bg) !important; }
+:deep(.row-mismatch:hover > td.el-table__cell) { background-color: var(--qa-row-mismatch-hover) !important; }
 
-/* ── 空列表引导 ──────────────────────────────────────────────────────────────── */
+:deep(.row-ignored) { background-color: var(--qa-row-ignored-bg) !important; opacity: 0.55; }
+:deep(.row-ignored:hover > td.el-table__cell) { background-color: var(--qa-row-ignored-bg) !important; }
+
 .empty-list-hint {
-    display: flex;
-    align-items: flex-start;
-    gap: 16px;
-    padding: 24px 20px;
-    margin-bottom: 12px;
-    background: #fafafa;
-    border: 1px dashed #dcdfe6;
-    border-radius: 8px;
-    color: #909399;
+    display: flex; align-items: flex-start; gap: 16px;
+    padding: 24px 20px; margin-bottom: 12px;
+    background: #fafafa; border: 1px dashed #dcdfe6;
+    border-radius: 8px; color: #909399;
 }
-.empty-hint-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #606266;
-    margin-bottom: 6px;
-}
-.empty-hint-actions {
-    font-size: 13px;
-    line-height: 1.9;
-    color: #909399;
-}
+.empty-hint-title { font-size: 14px; font-weight: 600; color: #606266; margin-bottom: 6px; }
+.empty-hint-actions { font-size: 13px; line-height: 1.9; color: #909399; }
 .empty-hint-actions b { color: #409EFF; }
 
-:deep(.row-ignored) {
-    background-color: var(--qa-row-ignored-bg) !important;
-    opacity: 0.55;
-}
-:deep(.row-ignored:hover > td.el-table__cell) {
-    background-color: var(--qa-row-ignored-bg) !important;
-}
+.field-missing { color: #E6A23C; font-size: 12px; font-weight: 500; white-space: nowrap; }
 
-.field-missing {
-    color: #E6A23C;
-    font-size: 12px;
-    font-weight: 500;
-    white-space: nowrap;
+/* ── Excel 导入弹窗 ─────────────────────────────────────────────────────────── */
+.import-info-box {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 14px 16px;
+    background: #ecf5ff; border-left: 4px solid #409EFF;
+    border-radius: 4px; font-size: 13px; line-height: 1.8;
 }
-
-/* ── 页面卡片顶部 header ───────────────────────────────────────────────────── */
-.page-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.page-card-header-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-.page-type-accent {
-    width: 4px;
-    height: 36px;
-    border-radius: 3px;
-    flex-shrink: 0;
-}
-.page-card-title {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--qa-heading-color);
-    line-height: 1.2;
-}
-.page-card-subtitle {
-    margin: 2px 0 0;
-    font-size: 12px;
-    color: var(--qa-subtext-color);
-}
-
-/* ── Collapse 整体优化 ───────────────────────────────────────────────────── */
-:deep(.custom-collapse .el-collapse-item__header) {
-    background: #fafbfc;
-    border-radius: 6px;
-    padding: 0 16px;
+.import-preview-count {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 16px;
+    background: #f5f7fa; border-radius: 6px;
     font-size: 14px;
-    transition: background 0.15s;
-}
-:deep(.custom-collapse .el-collapse-item__header:hover) {
-    background: #f0f4ff;
-}
-:deep(.custom-collapse .el-collapse-item__header.is-active) {
-    border-bottom: 1px solid #e8eaed;
-    border-radius: 6px 6px 0 0;
-    background: #fff;
-    border-left: 3px solid var(--type-color, #1677ff);
-}
-:deep(.custom-collapse .el-collapse-item) {
-    border: 1px solid #e8eaed;
-    border-radius: 8px;
-    margin-bottom: 10px;
-    overflow: hidden;
-}
-:deep(.custom-collapse .el-collapse-item__wrap) {
-    border-top: none;
 }
 </style>

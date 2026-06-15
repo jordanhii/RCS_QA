@@ -31,7 +31,7 @@ function sendFile(res, outFile, filename) {
 
 // POST /api/export-data
 router.post('/export-data', ah(async (req, res) => {
-    const { domain, endpoint, alertType, pageSize } = req.body
+    const { domain, endpoint, alertType, pageSize, startTime } = req.body
     if (!domain || !endpoint) return res.status(400).json({ error: 'domain 和 endpoint 为必填项' })
 
     const dateStr = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)
@@ -41,8 +41,9 @@ router.post('/export-data', ah(async (req, res) => {
     const args = [script, '--domain', domain, '--endpoint', endpoint,
                   '--page-size', String(pageSize || 200), '--output', outFile]
     if (alertType) args.push('--alert-type', alertType)
+    if (startTime) args.push('--start-time', startTime)
 
-    pushLog('export', `▶ 开始导出  domain=${domain}  endpoint=${endpoint}  pageSize=${pageSize || 200}`)
+    pushLog('export', `▶ 开始导出  domain=${domain}  endpoint=${endpoint}  pageSize=${pageSize || 200}${startTime ? `  startTime≥${startTime}` : ''}`)
     const { exitCode, stderr } = await runPython(args, 'export')
 
     if (exitCode !== 0 || !fs.existsSync(outFile)) {

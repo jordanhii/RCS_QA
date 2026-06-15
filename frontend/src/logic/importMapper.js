@@ -79,6 +79,38 @@ export function mapExcelRows(dataToImport, typeId, durationMin = 30) {
             }
         }
 
+        // ⚠️ 优惠同比/环比 Excel 列名为占位，请对照实际导出列调整
+        if (typeId === 11) { // 优惠同比
+            const toNum = (v) => (v === null || v === undefined || v === '') ? null : Number(v)
+            const toStr = (v) => (v === null || v === undefined || v === '') ? null : String(v)
+            return {
+                alertId:    row.alertNumber        || '',
+                alertTime:  row.alertGeneratedTime || '',
+                rewardType: toStr(row.rewardType),
+                todayTotal: toNum(row.todayTotalReward),
+                avg7:       toNum(row.last7DaysAvg),
+                avg30:      toNum(row.last30DaysAvg),
+                devResult,
+                ignored: false,
+            }
+        }
+
+        if (typeId === 12) { // 优惠环比
+            const toNum = (v) => (v === null || v === undefined || v === '') ? null : Number(v)
+            const toStr = (v) => (v === null || v === undefined || v === '') ? null : String(v)
+            return {
+                alertId:       row.alertNumber        || '',
+                alertTime:     row.alertGeneratedTime || '',
+                rewardType:    toStr(row.rewardType),
+                todayTotal:    toNum(row.todayTotalReward),
+                currentGrowth: toNum(row.currentPeriodGrowth),
+                lastGrowth:    toNum(row.lastPeriodGrowth),
+                alertSeq:      toNum(row.alertSeq),
+                devResult,
+                ignored: false,
+            }
+        }
+
         if ([5, 6, 7].includes(typeId)) {
             return {
                 alertId: row.alertNumber || '',

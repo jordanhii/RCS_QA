@@ -265,10 +265,11 @@
                         border
                         style="width: 100%"
                         size="small"
+                        :row-key="(row) => row.alertId || list.records.indexOf(row)"
                         :row-class-name="({ row }) => getRowClassName(list.records.indexOf(row), list.records, getCfg(list))"
                         @selection-change="(rows) => list._selectedRows = rows">
 
-                        <el-table-column type="selection" width="40" fixed="left" />
+                        <el-table-column type="selection" width="40" fixed="left" reserve-selection />
 
                         <!-- 1. 告警单号 -->
                         <el-table-column label="告警单号" min-width="120">
@@ -897,7 +898,7 @@ const addRow = (list) => {
     list.records.unshift({
         alertId: '', alertTime: '',
         val1: 0, depositAmount: 0, withdrawalAmount: 0,
-        historicalYesterday: null, historicalLastWeek: null, historicalLastMonth: null,
+        historicalYesterday: 0, historicalLastWeek: 0, historicalLastMonth: 0,
         lowerThanYesterday: null, lowerThanLastWeek: null, lowerThanLastMonth: null,
         devResult: '', ignored: false,
     })

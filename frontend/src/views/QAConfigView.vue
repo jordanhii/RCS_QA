@@ -136,14 +136,19 @@
 
                 <!-- 风控系统地址已移至「接口配置」页面 -->
 
+            </div><!-- /qa-config-left -->
+
+            <!-- ── 右栏：导出工具 ─────────────────────────────────────────── -->
+            <div class="qa-config-right">
+
                 <!-- 数据导出工具 -->
-                <div class="section-label" style="margin-top: 28px;">数据导出工具</div>
+                <div class="section-label">数据导出工具</div>
                 <div class="config-panel">
                     <div class="section-hint">
                         <el-icon size="14" color="#409EFF"><InfoFilled /></el-icon>
                         <span>
                             直接从 RC 系统抓取告警数据并导出为 Excel。
-                            需要先运行 <b>fetch_rc_data.py</b> 完成登录并保存 session，再使用此功能。
+                            首次使用会自动用 <b>.env</b> 中配置的账号和 OTP 登录，登录成功后 session 自动保存，后续导出无需重复登录。
                         </span>
                     </div>
 
@@ -178,6 +183,7 @@
                                 <el-option value="allTransactionAlerts"  label="allTransactionAlerts（存提款）" />
                                 <el-option value="allBetAlerts"          label="allBetAlerts（投注优惠）" />
                                 <el-option value="allGameProfitAlerts"   label="allGameProfitAlerts（游戏盈利 CG）" />
+                                <el-option value="rewardAlerts"          label="rewardAlerts（优惠/红利）" />
                             </el-select>
                         </div>
 
@@ -198,7 +204,7 @@
                             </el-select>
                         </div>
 
-                        <div class="param-row" style="border-bottom: none;">
+                        <div class="param-row">
                             <div class="param-row-label">抓取数量</div>
                             <el-select v-model="exportForm.pageSize" style="width: 160px;">
                                 <el-option :value="50"   label="50 条" />
@@ -207,6 +213,27 @@
                                 <el-option :value="500"  label="500 条" />
                                 <el-option :value="1000" label="1000 条" />
                             </el-select>
+                        </div>
+
+                        <div class="param-row" style="border-bottom: none;">
+                            <div class="param-row-label">
+                                起始时间
+                                <el-tooltip content="只导出告警时间 ≥ 此时间的数据，留空则导出全部抓到的数据" placement="top">
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-date-picker
+                                v-model="exportForm.startTime"
+                                type="datetime"
+                                placeholder="留空 = 不过滤"
+                                format="YYYY-MM-DD HH:mm"
+                                value-format="YYYY-MM-DD HH:mm:ss"
+                                style="width: 210px;"
+                                clearable
+                            />
+                            <span v-if="exportForm.startTime" style="font-size:12px; color:#E6A23C; margin-left:8px;">
+                                仅导出 {{ exportForm.startTime.slice(0,16) }} 之后
+                            </span>
                         </div>
                     </div>
 
@@ -219,7 +246,7 @@
                 </div>
 
                 <!-- IGO 平台导出 -->
-                <div class="section-label" style="margin-top: 28px;">IGO 平台导出</div>
+                <div class="section-label" style="margin-top: 24px;">IGO 平台导出</div>
                 <div class="config-panel">
                     <div class="section-hint">
                         <el-icon size="14" color="#409EFF"><InfoFilled /></el-icon>
@@ -360,7 +387,7 @@
                     </div>
                 </div>
 
-            </div><!-- /qa-config-left -->
+            </div><!-- /qa-config-right -->
         </div><!-- /qa-config-body -->
     </div>
 </template>
@@ -430,7 +457,7 @@ const save = async () => {
 
 // ── Export ────────────────────────────────────────────────────────────────────
 const isExporting = ref(false)
-const exportForm  = reactive({ domain: '', endpoint: 'allTransactionAlerts', alertType: '', pageSize: 200 })
+const exportForm  = reactive({ domain: '', endpoint: 'allTransactionAlerts', alertType: '', pageSize: 200, startTime: null })
 
 // 告警类型选项按接口分组，切换接口时自动过滤
 const ALERT_TYPE_MAP = {
@@ -450,6 +477,10 @@ const ALERT_TYPE_MAP = {
     allGameProfitAlerts: [
         { value: 'game-profit', label: 'game-profit（游戏盈利 CG）' },
     ],
+    rewardAlerts: [
+        { value: 'reward-cumulative', label: 'reward-cumulative（优惠同比）' },
+        { value: 'reward-interval',   label: 'reward-interval（优惠环比）' },
+    ],
 }
 const alertTypeOptions = computed(() => ALERT_TYPE_MAP[exportForm.endpoint] || [])
 
@@ -466,7 +497,10 @@ const doExport = async () => {
     }
     isExporting.value = true
     try {
-        const resp = await axios.post(`${API}/export-data`, { ...exportForm }, { responseType: 'blob', timeout: 120_000 })
+        const resp = await axios.post(`${API}/export-data`, {
+            ...exportForm,
+            startTime: exportForm.startTime || null,
+        }, { responseType: 'blob', timeout: 120_000 })
         const blobUrl = URL.createObjectURL(resp.data)
         const link    = document.createElement('a')
         const cd      = resp.headers['content-disposition'] || ''
@@ -577,6 +611,8 @@ const BATCH_TYPE_DEFS = [
     { key: 'gp',    label: '游戏盈利(CG)',         api: () => axios.get(`${API}/game-profit-lists`),    storageKey: gpSyncKey },
     { key: 'tl-9',  label: '存提差环比',           api: () => axios.get(`${API}/test-lists/9`),         storageKey: syncKey },
     { key: 'tl-10', label: '存提差同比',           api: () => axios.get(`${API}/test-lists/10`),        storageKey: syncKey },
+    { key: 'tl-11', label: '优惠同比',             api: () => axios.get(`${API}/test-lists/11`),        storageKey: syncKey },
+    { key: 'tl-12', label: '优惠环比',             api: () => axios.get(`${API}/test-lists/12`),        storageKey: syncKey },
 ]
 
 const isBatchLoading = ref(false)
@@ -688,8 +724,14 @@ function batchDisableSync() {
 .page-subtitle { margin: 0; font-size: 13px; color: var(--qa-subtext-color); }
 
 /* ── Layout ─────────────────────────────────────────────────────────────────── */
-.qa-config-body { display: flex; flex-direction: column; gap: 20px; }
-.qa-config-left { max-width: 640px; }
+.qa-config-body {
+    display: flex;
+    flex-direction: row;
+    gap: 24px;
+    align-items: flex-start;
+}
+.qa-config-left  { flex: 1; min-width: 0; }
+.qa-config-right { flex: 1; min-width: 0; }
 
 /* ── Section label ──────────────────────────────────────────────────────────── */
 .section-label {

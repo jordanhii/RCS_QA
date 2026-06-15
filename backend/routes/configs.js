@@ -31,9 +31,13 @@ router.delete('/:id', ah(async (req, res) => {
     ])
     const affectedWithData = testWithData + gpWithData
 
-    // Delete config then cascade-clear all references
-    await Promise.all([
-        Config.findByIdAndDelete(id),
+    // Delete config first, then cascade-clear references.
+    // Not wrapped in a transaction (requires replica set); if cascade fails the
+    // frontend's configId validation on load will self-heal dangling references.
+    const deleted = await Config.findByIdAndDelete(id)
+    if (!deleted) return res.status(404).json({ error: '配置不存在' })
+
+    await Promise.allSettled([
         TestList.updateMany({ configId: id }, { $set: { configId: null } }),
         GameProfitList.updateMany({ configId: id }, { $set: { configId: null } }),
     ])

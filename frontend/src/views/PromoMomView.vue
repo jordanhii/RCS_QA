@@ -4,9 +4,9 @@
             <template #header>
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <div>
-                        <h2 style="margin:0 0 2px;color:var(--qa-heading-color);">存提差环比告警检查</h2>
+                        <h2 style="margin:0 0 2px;color:var(--qa-heading-color);">{{ PAGE_TITLE }}告警检查</h2>
                         <p style="margin:0;font-size:13px;color:var(--qa-subtext-color);">
-                            验证 netflow-additional-present-day 存提差环比告警逻辑
+                            验证 {{ ALERT_TYPE }} 优惠环比告警逻辑
                         </p>
                     </div>
                     <el-button type="primary" size="large" @click="createNewList">
@@ -57,15 +57,6 @@
                                     <el-option disabled value="" label="暂无配置，请前往「告警配置」添加" />
                                 </template>
                             </el-select>
-                            <el-popover v-if="getCfg(list)" placement="bottom-start" trigger="hover" :width="240">
-                                <template #reference>
-                                    <el-icon size="14" color="#409EFF" style="cursor:help;margin-left:4px;vertical-align:middle;"><InfoFilled /></el-icon>
-                                </template>
-                                <div style="font-size:13px;line-height:2;">
-                                    <div><b>检查间隔：</b>{{ getAlertInterval(getCfg(list)) }} 分钟</div>
-                                    <div><b>下降阈值 Y：</b>{{ getY(getCfg(list)) }}</div>
-                                </div>
-                            </el-popover>
                         </div>
                         <div class="panel-right">
                             <el-upload action="#" :auto-upload="false" :show-file-list="false"
@@ -217,6 +208,25 @@
                             </template>
                         </div>
                         <div class="action-bar-right">
+                            <!-- 优惠类型筛选（仅过滤展示行，逻辑仍按完整 records 的绝对索引计算） -->
+                            <span class="filter-label">优惠类型：</span>
+                            <el-select
+                                v-model="list._rewardTypeFilter"
+                                size="small"
+                                style="width:200px;"
+                                placeholder="全部"
+                                clearable
+                                @change="list._currentPage = 1"
+                            >
+                                <el-option label="全部" value="" />
+                                <el-option
+                                    v-for="t in rewardTypeOptions(list)"
+                                    :key="t"
+                                    :label="t"
+                                    :value="t"
+                                />
+                            </el-select>
+                            <el-divider direction="vertical" />
                             <el-date-picker
                                 v-model="list._dateRange"
                                 type="datetimerange"
@@ -231,7 +241,7 @@
                                 @change="list._currentPage = 1"
                                 clearable
                             />
-                            <span v-if="list._dateRange" class="filter-count">
+                            <span v-if="list._dateRange || list._rewardTypeFilter" class="filter-count">
                                 {{ getFilteredRecords(list).length }} / {{ list.records.length }} 条
                             </span>
                         </div>
@@ -242,11 +252,12 @@
                     <el-table :data="getPagedRecords(list)"
                         border size="small" style="width:100%;margin-top:8px;"
                         :row-key="(row) => row.alertId || list.records.indexOf(row)"
-                        :row-class-name="({ row }) => getRowClass(row, getCfg(list))"
+                        :row-class-name="({ row }) => getRowClass(list.records.indexOf(row), list.records, getCfg(list))"
                         @selection-change="rows => list._selectedRows = rows">
 
                         <el-table-column type="selection" width="40" fixed="left" reserve-selection />
 
+                        <!-- 1. 告警单号 -->
                         <el-table-column label="告警单号" width="160" fixed>
                             <template #default="{ row }">
                                 <el-input v-model="row.alertId" size="small"
@@ -254,6 +265,7 @@
                             </template>
                         </el-table-column>
 
+                        <!-- 2. 告警时间 -->
                         <el-table-column label="告警时间" min-width="170">
                             <template #default="{ row }">
                                 <el-date-picker v-model="row.alertTime" type="datetime"
@@ -264,104 +276,102 @@
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="当前存提差" width="115">
+                        <!-- 3. 优惠类型 -->
+                        <el-table-column label="优惠类型" min-width="180">
                             <template #default="{ row }">
-                                <el-input-number v-model="row.val1" size="small"
+                                <el-input v-model="row.rewardType" size="small"
+                                    style="font-size:12px;" placeholder="ALL / 活动名" />
+                            </template>
+                        </el-table-column>
+
+                        <!-- 4. 今日累计优惠 -->
+                        <el-table-column label="今日累计优惠" width="120">
+                            <template #default="{ row }">
+                                <span v-if="row.todayTotal === null" class="field-missing">⚠ 未抓到</span>
+                                <el-input-number v-else v-model="row.todayTotal" size="small"
                                     :controls="false" style="width:100%;" />
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="当前存款额" width="115">
+                        <!-- 5. 本时段增长 -->
+                        <el-table-column label="本时段增长" width="120">
                             <template #default="{ row }">
-                                <el-input-number v-model="row.depositAmount" size="small"
+                                <span v-if="row.currentGrowth === null" class="field-missing">⚠ 未抓到</span>
+                                <el-input-number v-else v-model="row.currentGrowth" size="small"
                                     :controls="false" style="width:100%;" />
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="当前提款额" width="115">
+                        <!-- 6. 上时段增长×倍数 -->
+                        <el-table-column label="上时段增长" width="135">
                             <template #default="{ row }">
-                                <el-input-number v-model="row.withdrawalAmount" size="small"
+                                <span v-if="row.lastGrowth === null" class="field-missing">⚠ 未抓到</span>
+                                <el-input-number v-else v-model="row.lastGrowth" size="small"
                                     :controls="false" style="width:100%;" />
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="Last 存提差" width="115">
+                        <!-- 7. 今日第N个告警 -->
+                        <el-table-column label="今日第N个告警" width="120">
                             <template #default="{ row }">
-                                <el-input-number v-model="row.lastNetflowAmount" size="small"
+                                <span v-if="row.alertSeq === null" class="field-missing">⚠ 未抓到</span>
+                                <el-input-number v-else v-model="row.alertSeq" size="small"
                                     :controls="false" style="width:100%;" />
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="Last 存款额" width="115">
-                            <template #default="{ row }">
-                                <el-input-number v-model="row.lastDepositAmount" size="small"
-                                    :controls="false" style="width:100%;" />
-                            </template>
-                        </el-table-column>
-
-                        <el-table-column label="Last 提款额" width="115">
-                            <template #default="{ row }">
-                                <el-input-number v-model="row.lastWithdrawalAmount" size="small"
-                                    :controls="false" style="width:100%;" />
-                            </template>
-                        </el-table-column>
-
-                        <el-table-column width="95" align="right">
+                        <!-- 8. 告警结果 -->
+                        <el-table-column width="135" align="center">
                             <template #header>
                                 <el-tooltip placement="top">
-                                    <template #content>下降金额 = Last存提差 − 当前存提差</template>
-                                    <span class="tip-header">下降金额&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
-                                </el-tooltip>
-                            </template>
-                            <template #default="{ row }">
-                                <span :style="{ color: calcDecline(row) >= getY(getCfg(list)) ? 'var(--qa-fail)' : '#606266', fontWeight: 600 }">
-                                    {{ fmt(calcDecline(row)) }}
-                                </span>
-                            </template>
-                        </el-table-column>
-
-                        <el-table-column width="90" align="center">
-                            <template #header>
-                                <el-tooltip placement="top">
-                                    <template #content>下降金额 ≥ Y（{{ getCfg(list) ? getY(getCfg(list)) : '未配置' }}）→ TRUE</template>
+                                    <template #content>本时段增长 ≥ 上时段增长×倍数 → TRUE；缺对比阈值（如0点首段）→ 数据不足</template>
                                     <span class="tip-header">告警结果&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
                                 </el-tooltip>
                             </template>
                             <template #default="{ row }">
-                                <el-tag :type="calcNormalResult(row, getCfg(list)) === 'TRUE' ? 'success' : 'danger'" size="small">
-                                    {{ calcNormalResult(row, getCfg(list)) }}
+                                <template v-if="calcNormalResult(list.records.indexOf(row), list.records, getCfg(list)) === null">
+                                    <span class="field-missing">⚠ 数据不足/未抓到</span>
+                                </template>
+                                <el-tag v-else :type="calcNormalResult(list.records.indexOf(row), list.records, getCfg(list)) === 'TRUE' ? 'success' : 'danger'" size="small">
+                                    {{ calcNormalResult(list.records.indexOf(row), list.records, getCfg(list)) }}
                                 </el-tag>
                             </template>
                         </el-table-column>
 
+                        <!-- 9. 风控系统判断（只读，来自同步/导入的 RC 判断） -->
                         <el-table-column label="风控系统判断" width="115" align="center">
                             <template #default="{ row }">
-                                <el-select v-model="row.devResult" size="small" style="width:90px;"
-                                    placeholder="选择" clearable>
-                                    <el-option value="TRUE" label="TRUE" />
-                                    <el-option value="FALSE" label="FALSE" />
-                                </el-select>
+                                <el-tag v-if="row.devResult"
+                                    :type="row.devResult === 'TRUE' ? 'success' : 'danger'"
+                                    size="small">
+                                    {{ row.devResult }}
+                                </el-tag>
+                                <span v-else class="field-missing">—</span>
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="逻辑一致" width="72" align="center">
+                        <!-- 10. 逻辑一致 -->
+                        <el-table-column label="逻辑一致" width="90" align="center">
                             <template #default="{ row }">
                                 <span v-if="row.ignored" style="color:#c0c4cc;">—</span>
-                                <el-icon v-else-if="row.devResult && calcLogicMatch(row, getCfg(list))" color="var(--qa-pass)" size="16"><CircleCheck /></el-icon>
-                                <el-icon v-else-if="row.devResult" color="var(--qa-fail)" size="16"><CircleClose /></el-icon>
-                                <span v-else style="color:#c0c4cc;">?</span>
+                                <template v-else-if="row.devResult">
+                                    <el-tag v-if="calcLogicMatch(list.records.indexOf(row), list.records, getCfg(list))" type="success" size="small">✓ 一致</el-tag>
+                                    <el-tag v-else type="danger" size="small">✗ 异常</el-tag>
+                                </template>
+                                <el-tag v-else type="info" size="small">待判断</el-tag>
                             </template>
                         </el-table-column>
 
+                        <!-- 11. 操作 -->
                         <el-table-column label="操作" width="112" align="center" fixed="right">
-                            <template #default="{ row, $index }">
+                            <template #default="{ row }">
                                 <el-button size="small" link
                                     :type="row.ignored ? 'primary' : 'warning'"
                                     @click="row.ignored = !row.ignored; saveList(list, false)">
                                     {{ row.ignored ? '取消忽略' : '忽略' }}
                                 </el-button>
                                 <el-button size="small" link type="danger"
-                                    @click="deleteRow(list, getPageOffset(list) + $index)">删除</el-button>
+                                    @click="deleteRow(list, list.records.indexOf(row))">删除</el-button>
                             </template>
                         </el-table-column>
                     </el-table>
@@ -397,13 +407,16 @@ import {
 import * as XLSX from 'xlsx'
 import { useSyncManager } from '../composables/useSyncManager.js'
 import { useAppStore } from '../stores/appStore.js'
+import { PAGE_TITLES } from '../logic/alertTypes.js'
 import {
-    calcDecline, calcNormalResult, calcLogicMatch,
-    getRowClass, getMatchCount, getY, getAlertInterval
-} from '../logic/netflowCompLogic.js'
+    calcNormalResult, calcLogicMatch,
+    getRowClass, getMatchCount
+} from '../logic/promoMomLogic.js'
 
-const API     = 'http://localhost:3000/api'
-const TYPE_ID = 9
+const API       = 'http://localhost:3000/api'
+const TYPE_ID   = 12
+const PAGE_TITLE = PAGE_TITLES[TYPE_ID]
+const ALERT_TYPE = 'reward-interval'
 
 // ── Store ──────────────────────────────────────────────────────────────────────
 const appStore = useAppStore()
@@ -420,7 +433,7 @@ const loadRcEnvs = async () => {
     try { const { data } = await axios.get(`${API}/qa-config`); rcEnvOptions.value = data.rcEnvs || [] } catch {}
 }
 
-// ── 关联配置列表（typeId=9）───────────────────────────────────────────────────
+// ── 关联配置列表（typeId=12）──────────────────────────────────────────────────
 const availableConfigs = ref([])
 const loadAvailableConfigs = async () => {
     try { const { data } = await axios.get(`${API}/configs/${TYPE_ID}`); availableConfigs.value = data } catch {}
@@ -439,6 +452,7 @@ const fetchSyncStatusFn = async (rcBaseUrl = '') => {
 }
 
 // ── Sync composable ───────────────────────────────────────────────────────────
+const toNum = v => (v === null || v === undefined || v === '') ? null : Number(v)
 const {
     cooldownSec, startTick, stopTick, destroyAll,
     startAutoSync: _startAutoSync, stopAutoSync: _stopAutoSync, manualSync: _manualSync,
@@ -447,16 +461,15 @@ const {
         `${API}/sync-cache/${TYPE_ID}?url=${encodeURIComponent(list.rcBaseUrl || '')}`,
     filterRecords: raw => raw,
     mapRecord: item => ({
-        alertId:              String(item.alertId  || ''),
-        alertTime:            String(item.alertTime || ''),
-        val1:                 Number(item.val1)                 || 0,
-        depositAmount:        Number(item.depositAmount)        || 0,
-        withdrawalAmount:     Number(item.withdrawalAmount)     || 0,
-        lastNetflowAmount:    Number(item.lastNetflowAmount)    || 0,
-        lastDepositAmount:    Number(item.lastDepositAmount)    || 0,
-        lastWithdrawalAmount: Number(item.lastWithdrawalAmount) || 0,
-        devResult:            item.devResult || '',
-        ignored:              false,
+        alertId:             String(item.alertId  || ''),
+        alertTime:           String(item.alertTime || ''),
+        rewardType:          String(item.rewardType ?? '') || '',
+        todayTotal:          toNum(item.todayTotal),
+        currentGrowth:       toNum(item.currentGrowth),
+        lastGrowth: toNum(item.lastGrowth),
+        alertSeq:            toNum(item.alertSeq),
+        devResult:           item.devResult || '',
+        ignored:             false,
     }),
     onNewRecords: async (list) => { await saveList(list, false) },
 })
@@ -482,20 +495,29 @@ const allLists      = ref([])
 const activeLists   = ref([])
 const isPageLoading = ref(false)
 
-// ── Format helper ──────────────────────────────────────────────────────────────
-const fmt = v => (v === undefined || v === null) ? '-' :
-    Number(v).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+// ── Reward-type options ──────────────────────────────────────────────────────────
+const rewardTypeOptions = list => {
+    const set = new Set()
+    list.records.forEach(r => { if (r.rewardType) set.add(r.rewardType) })
+    return [...set]
+}
 
-// ── Time filter + pagination ───────────────────────────────────────────────────
+// ── Time + reward-type filter + pagination ───────────────────────────────────────
 const getFilteredRecords = list => {
-    if (!list._dateRange?.[0]) return list.records
-    const s = new Date(list._dateRange[0]).getTime()
-    const e = new Date(list._dateRange[1]).getTime()
-    return list.records.filter(r => {
-        if (!r.alertTime) return false
-        const t = new Date(r.alertTime).getTime()
-        return t >= s && t <= e
-    })
+    let rows = list.records
+    if (list._dateRange?.[0]) {
+        const s = new Date(list._dateRange[0]).getTime()
+        const e = new Date(list._dateRange[1]).getTime()
+        rows = rows.filter(r => {
+            if (!r.alertTime) return false
+            const t = new Date(r.alertTime).getTime()
+            return t >= s && t <= e
+        })
+    }
+    if (list._rewardTypeFilter) {
+        rows = rows.filter(r => r.rewardType === list._rewardTypeFilter)
+    }
+    return rows
 }
 
 const getPagedRecords = list => {
@@ -503,12 +525,6 @@ const getPagedRecords = list => {
     const page = list._currentPage || 1
     const size = list._pageSize    || 50
     return filtered.slice((page - 1) * size, page * size)
-}
-
-const getPageOffset = list => {
-    const page = list._currentPage || 1
-    const size = list._pageSize    || 50
-    return (page - 1) * size
 }
 
 // ── Batch operations ───────────────────────────────────────────────────────────
@@ -554,6 +570,7 @@ const fetchLists = async () => {
             _pageSize:      50,
             _selectedRows:  [],
             _dateRange:     null,
+            _rewardTypeFilter: '',
         }))
         if (allLists.value.length > 0) activeLists.value = [allLists.value[0]._id]
     } finally {
@@ -595,7 +612,7 @@ const createNewList = async () => {
             _isEditingName: false, _tempName: data.listName,
             _isSaving: false, _syncEnabled: false, _isSyncingNow: false,
             _lastSyncAt: '', _currentPage: 1, _pageSize: 50,
-            _selectedRows: [], _dateRange: null,
+            _selectedRows: [], _dateRange: null, _rewardTypeFilter: '',
         })
         activeLists.value = [data._id]
     } catch {}
@@ -628,22 +645,21 @@ const handleImport = (file, list) => {
             const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
 
             const mapped = rows
-                .filter(r => !r.alertType || r.alertType === 'netflow-additional-present-day')
+                .filter(r => !r.alertType || r.alertType === ALERT_TYPE)
                 .map(r => ({
-                    alertId:              String(r.alertNumber || r.alertId || ''),
-                    alertTime:            String(r.alertGeneratedTime || r.alertTime || ''),
-                    val1:                 Number(r.currentAmount        || r.val1                 || 0),
-                    depositAmount:        Number(r.depositAmount        || 0),
-                    withdrawalAmount:     Number(r.withdrawalAmount     || 0),
-                    lastNetflowAmount:    Number(r.lastNetflowAmount    || 0),
-                    lastDepositAmount:    Number(r.lastDepositAmount    || 0),
-                    lastWithdrawalAmount: Number(r.lastWithdrawalAmount || 0),
-                    devResult:            String(r.alertNumber || '').trim() ? 'TRUE' : '',
-                    ignored:              false,
+                    alertId:             String(r.alertNumber || r.alertId || ''),
+                    alertTime:           String(r.alertGeneratedTime || r.alertTime || ''),
+                    rewardType:          String(r.rewardType ?? r['meta.rewardType'] ?? '') || '',
+                    todayTotal:          toNum(r.todayTotal          ?? r['meta.todayTotal']),
+                    currentGrowth:       toNum(r.currentGrowth       ?? r['meta.currentGrowth']),
+                    lastGrowth: toNum(r.lastGrowth ?? r['meta.lastGrowth']),
+                    alertSeq:            toNum(r.alertSeq            ?? r['meta.alertSeq']),
+                    devResult:           String(r.alertNumber || '').trim() ? 'TRUE' : '',
+                    ignored:             false,
                 }))
 
             if (mapped.length === 0) {
-                ElNotification.warning({ message: '未找到有效数据（请确认告警类型为 netflow-additional-present-day）', position: 'bottom-right' })
+                ElNotification.warning({ message: `未找到有效数据（请确认告警类型为 ${ALERT_TYPE}）`, position: 'bottom-right' })
                 return
             }
 
@@ -665,9 +681,8 @@ const handleImport = (file, list) => {
 // ── Row operations ─────────────────────────────────────────────────────────────
 const addRow = list => {
     list.records.unshift({
-        alertId: '', alertTime: '',
-        val1: 0, depositAmount: 0, withdrawalAmount: 0,
-        lastNetflowAmount: 0, lastDepositAmount: 0, lastWithdrawalAmount: 0,
+        alertId: '', alertTime: '', rewardType: '',
+        todayTotal: 0, currentGrowth: 0, lastGrowth: 0, alertSeq: 0,
         devResult: '', ignored: false,
     })
     list._currentPage = 1
@@ -750,10 +765,12 @@ onBeforeUnmount(() => { destroyAll(); stopTick() })
 .action-bar-left  { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .action-bar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .bulk-count { font-size: 13px; color: #606266; }
+.filter-label { font-size: 12px; color: #909399; white-space: nowrap; }
 .filter-count { font-size: 12px; color: #909399; white-space: nowrap; }
 
 /* ── Table ── */
 .tip-header { cursor: help; display: flex; align-items: center; gap: 2px; }
+.field-missing { color: #E6A23C; font-size: 12px; font-weight: 500; white-space: nowrap; }
 :deep(.row-mismatch td) { background-color: #fff0f0 !important; }
 :deep(.row-ignored td)  { opacity: .45; }
 

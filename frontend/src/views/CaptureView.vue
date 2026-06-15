@@ -223,6 +223,8 @@ const GROUP_HINTS = {
     8: '游戏盈利(CG) — COLORGAME 普通告警与连续告警字段映射',
     9: '存提差环比 — netflow-additional-present-day，对比当前与上期存提差',
     10: '存提差同比 — netflow-additional-historical，对比日累计存提差与历史同期',
+    11: '优惠同比 — reward-cumulative，今日累计优惠 ≥ 前7天/前30天平均×倍数（阈值取自注释）',
+    12: '优惠环比 — reward-interval，本时段增长 ≥ 上时段增长×倍数（阈值取自注释）',
 }
 const currentGroupHint = computed(() => GROUP_HINTS[Number(activeTab.value)] || '')
 
@@ -234,6 +236,8 @@ const typeNames = [
     { id: 7, label: '投/存+惠比' },{ id: 8, label: '游戏盈利(CG)' },
     { id: 9, label: '存提差环比' },
     { id: 10, label: '存提差同比' },
+    { id: 11, label: '优惠同比' },
+    { id: 12, label: '优惠环比' },
 ]
 
 // 每种告警类型，「告警逻辑检查」页面的列表字段
@@ -330,6 +334,25 @@ const LIST_FIELDS = {
         { value: 'lowerThanLastMonth',  label: '< 上月同天' },
         { value: 'devResult',           label: '风控系统判断' },
     ],
+    11: [
+        { value: 'alertId',    label: '告警单号' },
+        { value: 'alertTime',  label: '告警时间' },
+        { value: 'rewardType', label: '优惠类型' },
+        { value: 'todayTotal', label: '今日累计优惠' },
+        { value: 'avg7',       label: '前7天平均' },
+        { value: 'avg30',      label: '前30天平均' },
+        { value: 'devResult',  label: '风控系统判断' },
+    ],
+    12: [
+        { value: 'alertId',       label: '告警单号' },
+        { value: 'alertTime',     label: '告警时间' },
+        { value: 'rewardType',    label: '优惠类型' },
+        { value: 'todayTotal',    label: '今日累计优惠' },
+        { value: 'currentGrowth', label: '本时段增长' },
+        { value: 'lastGrowth',    label: '上时段增长' },
+        { value: 'alertSeq',      label: '今日第N个告警' },
+        { value: 'devResult',     label: '风控系统判断' },
+    ],
 }
 
 const currentListFields = computed(() => LIST_FIELDS[Number(activeTab.value)] || [])
@@ -342,6 +365,8 @@ const DEFAULT_ENDPOINTS = {
     7: '/allBetAlerts',         8: '/allGameProfitAlerts',
     9: '/allTransactionAlerts',
     10: '/allTransactionAlerts',
+    11: '/pendingRewardAlerts',
+    12: '/pendingRewardAlerts',
 }
 
 const DEFAULT_FIELDS = {
@@ -436,6 +461,26 @@ const DEFAULT_FIELDS = {
         { listField: 'lowerThanLastWeek',   path: 'lowerThanLastWeek' },
         { listField: 'lowerThanLastMonth',  path: 'lowerThanLastMonth' },
         { listField: 'devResult',           path: 'alertNumber' },
+    ],
+    // ⚠️ 优惠同比/环比的 RC 接口字段路径为占位默认，请在「接口配置」页对照真实接口确认/修改
+    11: [
+        { listField: 'alertId',    path: 'alertNumber' },
+        { listField: 'alertTime',  path: 'alertGeneratedTime' },
+        { listField: 'rewardType', path: 'alertMetadata.rewardType' },
+        { listField: 'todayTotal', path: 'alertMetadata.todayTotalReward' },
+        { listField: 'avg7',       path: 'alertMetadata.last7DaysAvg' },
+        { listField: 'avg30',      path: 'alertMetadata.last30DaysAvg' },
+        { listField: 'devResult',  path: 'alertNumber' },
+    ],
+    12: [
+        { listField: 'alertId',       path: 'alertNumber' },
+        { listField: 'alertTime',     path: 'alertGeneratedTime' },
+        { listField: 'rewardType',    path: 'alertMetadata.rewardType' },
+        { listField: 'todayTotal',    path: 'alertMetadata.todayTotalReward' },
+        { listField: 'currentGrowth', path: 'alertMetadata.currentPeriodGrowth' },
+        { listField: 'lastGrowth',    path: 'alertMetadata.lastPeriodGrowth' },
+        { listField: 'alertSeq',      path: 'alertMetadata.alertSeq' },
+        { listField: 'devResult',     path: 'alertNumber' },
     ],
 }
 

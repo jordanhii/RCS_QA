@@ -22,6 +22,9 @@ script/export_code.js
 backend/reset_db.js
 CHANGES.txt
 
+# Notes folder — local documentation, not for version control
+note/
+
 # OS
 .DS_Store
 
