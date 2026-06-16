@@ -4,7 +4,7 @@
             <template #header>
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <div>
-                        <h2 style="margin:0 0 2px;color:var(--qa-heading-color);">{{ PAGE_TITLE }}告警检查</h2>
+                        <h2 style="margin:0 0 2px;font-size:22px;color:var(--qa-heading-color);">{{ PAGE_TITLE }}告警检查</h2>
                         <p style="margin:0;font-size:13px;color:var(--qa-subtext-color);">
                             验证 {{ ALERT_TYPE }} 优惠环比告警逻辑
                         </p>
@@ -59,6 +59,19 @@
                             </el-select>
                         </div>
                         <div class="panel-right">
+                            <span class="save-status" style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#909399; margin-right:8px;">
+                                <template v-if="list._saveState === 'saving'">
+                                    <el-icon class="is-loading"><Loading /></el-icon> 保存中…
+                                </template>
+                                <template v-else-if="list._saveState === 'error'">
+                                    <el-icon color="#F56C6C"><CircleClose /></el-icon>
+                                    <span style="color:#F56C6C;">保存失败</span>
+                                    <el-button link type="primary" @click="saveList(list)">重试</el-button>
+                                </template>
+                                <template v-else>
+                                    <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="list._savedAt"> {{ list._savedAt }}</template>
+                                </template>
+                            </span>
                             <el-upload action="#" :auto-upload="false" :show-file-list="false"
                                 :on-change="(file) => handleImport(file, list)">
                                 <el-button type="warning" plain>
@@ -66,7 +79,7 @@
                                 </el-button>
                             </el-upload>
                             <el-button type="info" @click="addRow(list)">手工新增</el-button>
-                            <el-button type="primary" :loading="list._isSaving" @click="saveList(list, true)">保存列表数据</el-button>
+                            <el-divider direction="vertical" style="height:20px; margin:0 6px;" />
                             <el-button type="danger" plain @click="removeList(list._id)">删除</el-button>
                         </div>
                     </div>
@@ -287,36 +300,32 @@
                         <!-- 4. 今日累计优惠 -->
                         <el-table-column label="今日累计优惠" width="120">
                             <template #default="{ row }">
-                                <span v-if="row.todayTotal === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="row.todayTotal" size="small"
-                                    :controls="false" style="width:100%;" />
+                                <el-input-number v-model="row.todayTotal" size="small"
+                                    :controls="false" style="width:100%;" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
                         <!-- 5. 本时段增长 -->
                         <el-table-column label="本时段增长" width="120">
                             <template #default="{ row }">
-                                <span v-if="row.currentGrowth === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="row.currentGrowth" size="small"
-                                    :controls="false" style="width:100%;" />
+                                <el-input-number v-model="row.currentGrowth" size="small"
+                                    :controls="false" style="width:100%;" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
                         <!-- 6. 上时段增长×倍数 -->
                         <el-table-column label="上时段增长" width="135">
                             <template #default="{ row }">
-                                <span v-if="row.lastGrowth === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="row.lastGrowth" size="small"
-                                    :controls="false" style="width:100%;" />
+                                <el-input-number v-model="row.lastGrowth" size="small"
+                                    :controls="false" style="width:100%;" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
                         <!-- 7. 今日第N个告警 -->
                         <el-table-column label="今日第N个告警" width="120">
                             <template #default="{ row }">
-                                <span v-if="row.alertSeq === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="row.alertSeq" size="small"
-                                    :controls="false" style="width:100%;" />
+                                <el-input-number v-model="row.alertSeq" size="small"
+                                    :controls="false" style="width:100%;" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
@@ -353,7 +362,7 @@
                         <!-- 10. 逻辑一致 -->
                         <el-table-column label="逻辑一致" width="90" align="center">
                             <template #default="{ row }">
-                                <span v-if="row.ignored" style="color:#c0c4cc;">—</span>
+                                <el-tag v-if="row.ignored" type="info" size="small">—</el-tag>
                                 <template v-else-if="row.devResult">
                                     <el-tag v-if="calcLogicMatch(list.records.indexOf(row), list.records, getCfg(list))" type="success" size="small">✓ 一致</el-tag>
                                     <el-tag v-else type="danger" size="small">✗ 异常</el-tag>
@@ -385,7 +394,7 @@
                             :page-sizes="[30, 50, 100, 200]"
                             :total="getFilteredRecords(list).length"
                             layout="total, sizes, prev, pager, next, jumper"
-                            background small
+                            background
                             @size-change="list._currentPage = 1"
                         />
                     </div>
@@ -397,12 +406,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import axios from 'axios'
 import { ElNotification, ElMessageBox } from 'element-plus'
 import {
     Plus, Edit, Check, Close, CircleCheck, CircleClose,
-    Warning, DocumentAdd, InfoFilled, Upload, ArrowDown
+    Warning, DocumentAdd, InfoFilled, Upload, ArrowDown, Loading
 } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { useSyncManager } from '../composables/useSyncManager.js'
@@ -483,8 +492,25 @@ const startAutoSync = async list => {
     }
     await fetchSyncStatusFn(list.rcBaseUrl)
     await _startAutoSync(list, saveList)
+    saveSyncState(list)
 }
-const stopAutoSync = list => _stopAutoSync(list, saveList)
+const stopAutoSync = list => { _stopAutoSync(list, saveList); saveSyncState(list) }
+
+// ── 同步开关持久化 + 恢复（与「质检配置」批量开启共用同一 localStorage key）──
+// 修复：优惠环比页此前缺少恢复逻辑，导致质检配置「开启选中」后本页开关不生效、不会真正同步
+const SYNC_STORAGE_KEY = (id) => `rcs_sync_${id}`
+const saveSyncState = (list) => {
+    try { localStorage.setItem(SYNC_STORAGE_KEY(list._id), JSON.stringify({ enabled: list._syncEnabled })) } catch {}
+}
+const restoreSyncState = (list) => {
+    try {
+        const raw = localStorage.getItem(SYNC_STORAGE_KEY(list._id))
+        if (!raw) return
+        if (!JSON.parse(raw).enabled || !list.rcBaseUrl) return
+        list._syncEnabled = true
+        startAutoSync(list)
+    } catch {}
+}
 const manualSync   = async list => {
     await fetchSyncStatusFn(list.rcBaseUrl)
     await _manualSync(list)
@@ -563,6 +589,8 @@ const fetchLists = async () => {
             _isEditingName: false,
             _tempName:      l.listName,
             _isSaving:      false,
+            _saveState:     'idle',
+            _savedAt:       null,
             _syncEnabled:   false,
             _isSyncingNow:  false,
             _lastSyncAt:    '',
@@ -572,14 +600,18 @@ const fetchLists = async () => {
             _dateRange:     null,
             _rewardTypeFilter: '',
         }))
+        allLists.value.forEach(attachAutoSave)
         if (allLists.value.length > 0) activeLists.value = [allLists.value[0]._id]
     } finally {
         isPageLoading.value = false
     }
 }
 
-const saveList = async (list, notify = true) => {
-    list._isSaving = true
+// ── 自动保存：列表数据/配置一变就存，带状态反馈，无需手动点保存 ────────────────
+const _saveTimers = new Map()
+
+const saveList = async (list) => {
+    list._saveState = 'saving'
     try {
         await axios.post(`${API}/test-lists`, {
             _id:       list._id,
@@ -589,12 +621,30 @@ const saveList = async (list, notify = true) => {
             rcBaseUrl: list.rcBaseUrl || '',
             records:   list.records,
         })
-        if (notify) ElNotification.success({ message: '保存成功', position: 'bottom-right', duration: 2000 })
-    } catch {
-        ElNotification.error({ message: '保存失败，请重试', position: 'bottom-right' })
-    } finally {
-        list._isSaving = false
+        list._saveState = 'idle'
+        list._savedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } catch (e) {
+        list._saveState = 'error'
+        console.error('[saveList] 保存失败:', e)
     }
+}
+
+/** 防抖保存：连续改动 700ms 后落库一次 */
+const queueSave = (list) => {
+    list._saveState = 'saving'
+    clearTimeout(_saveTimers.get(list._id))
+    _saveTimers.set(list._id, setTimeout(() => saveList(list), 700))
+}
+
+/** 给列表挂自动保存监听：records / 关联配置 / RC地址 / 起始时间 任一变化即存 */
+const attachAutoSave = (list) => {
+    if (list._autosaveOn) return
+    list._autosaveOn = true
+    watch(
+        () => [list.records, list.configId, list.rcBaseUrl, list.syncStartTime],
+        () => queueSave(list),
+        { deep: true }
+    )
 }
 
 const createNewList = async () => {
@@ -610,10 +660,12 @@ const createNewList = async () => {
         allLists.value.unshift({
             ...data,
             _isEditingName: false, _tempName: data.listName,
-            _isSaving: false, _syncEnabled: false, _isSyncingNow: false,
+            _isSaving: false, _saveState: 'idle', _savedAt: null,
+            _syncEnabled: false, _isSyncingNow: false,
             _lastSyncAt: '', _currentPage: 1, _pageSize: 50,
             _selectedRows: [], _dateRange: null, _rewardTypeFilter: '',
         })
+        attachAutoSave(allLists.value[0])
         activeLists.value = [data._id]
     } catch {}
 }
@@ -692,6 +744,7 @@ const deleteRow = (list, idx) => list.records.splice(idx, 1)
 // ── Lifecycle ──────────────────────────────────────────────────────────────────
 onMounted(async () => {
     await Promise.all([fetchLists(), loadRcEnvs(), loadQAConfig(), loadAvailableConfigs()])
+    allLists.value.forEach(l => restoreSyncState(l))
     startTick()
     await fetchSyncStatusFn()
 })

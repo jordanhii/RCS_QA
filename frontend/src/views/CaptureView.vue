@@ -83,7 +83,7 @@
                         placeholder="例：/allTransactionAlerts"
                         style="max-width: 420px;"
                         clearable
-                        :disabled="!isEditing"
+                        @change="queueSave"
                     />
                 </div>
 
@@ -92,7 +92,7 @@
                     <el-table-column label="列表字段" width="200">
                         <template #default="scope">
                             <el-select v-model="scope.row.listField" size="small" style="width: 100%"
-                                placeholder="选择列表字段" :disabled="!isEditing">
+                                placeholder="选择列表字段" @change="queueSave">
                                 <el-option v-for="f in currentListFields" :key="f.value" :label="f.label" :value="f.value" />
                             </el-select>
                         </template>
@@ -100,10 +100,10 @@
                     <el-table-column label="API 字段路径">
                         <template #default="scope">
                             <el-input v-model="scope.row.path" size="small"
-                                placeholder="例：alertMetadata.currentAmount" :disabled="!isEditing" />
+                                placeholder="例：alertMetadata.currentAmount" @change="queueSave" />
                         </template>
                     </el-table-column>
-                    <el-table-column v-if="isEditing" label="操作" width="70" align="center">
+                    <el-table-column label="操作" width="70" align="center">
                         <template #default="scope">
                             <el-button type="danger" link size="small" @click="removeField(scope.$index)">删除</el-button>
                         </template>
@@ -111,26 +111,30 @@
                 </el-table>
             </template>
 
-            <!-- 底部操作行：左侧添加/重置，右侧编辑/保存/取消 -->
+            <!-- 底部操作行：左侧添加/重置，右侧自动保存状态指示 -->
             <div class="panel-footer">
                 <div class="footer-left">
-                    <template v-if="isEditing">
-                        <el-button size="small" @click="addField">
-                            <el-icon style="margin-right:4px;"><Plus /></el-icon> 添加字段
-                        </el-button>
-                        <el-button size="small" plain @click="resetDefaults">
-                            <el-icon style="margin-right:4px;"><RefreshRight /></el-icon> 恢复默认
-                        </el-button>
-                    </template>
+                    <el-button size="small" @click="addField">
+                        <el-icon style="margin-right:4px;"><Plus /></el-icon> 添加字段
+                    </el-button>
+                    <el-button size="small" plain @click="resetDefaults">
+                        <el-icon style="margin-right:4px;"><RefreshRight /></el-icon> 恢复默认
+                    </el-button>
                 </div>
                 <div class="footer-right">
-                    <template v-if="!isEditing">
-                        <el-button size="small" @click="enterEditMode">编辑</el-button>
-                    </template>
-                    <template v-else>
-                        <el-button plain size="small" @click="cancelEditMode">取消</el-button>
-                        <el-button type="primary" size="small" :loading="isSaving" @click="saveConfig">保存</el-button>
-                    </template>
+                    <span class="save-status" style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#909399;">
+                        <template v-if="saveState === 'saving'">
+                            <el-icon class="is-loading"><Loading /></el-icon> 保存中…
+                        </template>
+                        <template v-else-if="saveState === 'error'">
+                            <el-icon color="#F56C6C"><CircleClose /></el-icon>
+                            <span style="color:#F56C6C;">保存失败</span>
+                            <el-button link type="primary" @click="saveConfig">重试</el-button>
+                        </template>
+                        <template v-else>
+                            <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="savedAt"> {{ savedAt }}</template>
+                        </template>
+                    </span>
                 </div>
             </div>
         </div>
@@ -141,15 +145,15 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { ElNotification, ElMessageBox } from 'element-plus'
-import { Plus, InfoFilled, RefreshRight } from '@element-plus/icons-vue'
+import { Plus, InfoFilled, RefreshRight, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 
 const API = 'http://localhost:3000/api'
 const activeTab = ref('1')
 const endpoint = ref('')
 const fields = ref([])
 const isLoading = ref(false)
-const isSaving = ref(false)
-const isEditing = ref(false)
+const saveState = ref('idle')
+const savedAt = ref(null)
 
 // ─── RC 环境地址（多环境管理，统一来源）────────────────────────────────────
 const rcEnvs        = ref([])
@@ -194,22 +198,6 @@ const removeEnv = async (env) => {
     } catch {
         ElNotification.error({ message: '删除失败', position: 'bottom-right' })
     } finally { isDeletingEnv.value = -1 }
-}
-
-// snapshots for cancel
-let _origEndpoint = ''
-let _origFields = []
-
-const enterEditMode = () => {
-    _origEndpoint = endpoint.value
-    _origFields = fields.value.map(f => ({ ...f }))
-    isEditing.value = true
-}
-
-const cancelEditMode = () => {
-    endpoint.value = _origEndpoint
-    fields.value = _origFields.map(f => ({ ...f }))
-    isEditing.value = false
 }
 
 const GROUP_HINTS = {
@@ -365,8 +353,8 @@ const DEFAULT_ENDPOINTS = {
     7: '/allBetAlerts',         8: '/allGameProfitAlerts',
     9: '/allTransactionAlerts',
     10: '/allTransactionAlerts',
-    11: '/pendingRewardAlerts',
-    12: '/pendingRewardAlerts',
+    11: '/rewardAlerts',
+    12: '/rewardAlerts',
 }
 
 const DEFAULT_FIELDS = {
@@ -484,35 +472,22 @@ const DEFAULT_FIELDS = {
     ],
 }
 
-let _prevTab = '1'
-const onTypeChange = (newVal) => {
-    const oldVal = _prevTab
-    _prevTab = newVal
-    loadConfig(newVal, oldVal)
+const onTypeChange = () => {
+    loadConfig()
 }
 
-const loadConfig = async (newVal, oldVal) => {
-    // 编辑中切换类型：提示确认，放弃后再切
-    if (isEditing.value && oldVal !== undefined) {
-        try {
-            await ElMessageBox.confirm(
-                '当前有未保存的修改，切换类型后将丢失。确认切换？',
-                '未保存修改',
-                { type: 'warning', confirmButtonText: '放弃修改', cancelButtonText: '留在此页' }
-            )
-        } catch {
-            // 用户点取消，恢复原来的 tab
-            activeTab.value = oldVal
-            return
-        }
-    }
+const loadConfig = async () => {
+    // 切换类型时以编程方式重新拉取配置；本次不触发自动保存（保存仅由 @change 用户编辑触发）
     isLoading.value = true
-    isEditing.value = false
+    // 切换类型相当于重新加载干净数据，重置保存状态指示
+    saveState.value = 'idle'
+    let dbHasFields = false
     try {
         const res = await axios.get(`${API}/capture-config/${activeTab.value}`)
         const tid = Number(activeTab.value)
         endpoint.value = res.data.endpoint || DEFAULT_ENDPOINTS[tid] || ''
-        fields.value = res.data.fields?.length
+        dbHasFields = !!res.data.fields?.length
+        fields.value = dbHasFields
             ? res.data.fields.map(f => ({ ...f }))
             : (DEFAULT_FIELDS[tid] || []).map(f => ({ ...f }))
     } catch {
@@ -522,11 +497,18 @@ const loadConfig = async (newVal, oldVal) => {
     } finally {
         isLoading.value = false
     }
+    // 数据库里没有该类型的配置 → 用默认模板自动落库一次。
+    // 否则同步时后端找不到 captureConfig，会漏抓存款额/提款额/历史存提差等扩展字段
+    // （存提差同比 typeId 10 曾因此一直「未抓到」）。
+    if (!dbHasFields && fields.value.length) saveConfig()
 }
 
 onMounted(() => { loadConfig(); loadRcEnvs() })
 
-const addField = () => fields.value.push({ listField: '', path: '' })
+const addField = () => {
+    fields.value.push({ listField: '', path: '' })
+    queueSave()
+}
 
 const removeField = (idx) => {
     ElMessageBox.confirm('确定删除此字段映射？', '删除确认', {
@@ -535,6 +517,7 @@ const removeField = (idx) => {
         cancelButtonText: '取消'
     }).then(() => {
         fields.value.splice(idx, 1)
+        queueSave()
     }).catch(() => {})
 }
 
@@ -542,22 +525,24 @@ const resetDefaults = () => {
     const tid = Number(activeTab.value)
     endpoint.value = DEFAULT_ENDPOINTS[tid] || ''
     fields.value = (DEFAULT_FIELDS[tid] || []).map(f => ({ ...f }))
+    queueSave()
 }
 
+let _saveTimer = null
+const queueSave = () => { saveState.value = 'saving'; clearTimeout(_saveTimer); _saveTimer = setTimeout(saveConfig, 700) }
+
 const saveConfig = async () => {
-    isSaving.value = true
+    saveState.value = 'saving'
     try {
         await axios.post(`${API}/capture-config`, {
             typeId: Number(activeTab.value),
             endpoint: endpoint.value,
             fields: fields.value
         })
-        isEditing.value = false
-        ElNotification.success({ message: '抓取配置已保存', position: 'bottom-right' })
+        saveState.value = 'idle'
+        savedAt.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     } catch {
-        ElNotification.error({ message: '保存失败，请重试', position: 'bottom-right' })
-    } finally {
-        isSaving.value = false
+        saveState.value = 'error'
     }
 }
 </script>

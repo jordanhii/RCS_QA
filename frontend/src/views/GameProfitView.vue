@@ -4,7 +4,7 @@
             <template #header>
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <div>
-                        <h2 style="margin:0 0 2px;color:var(--qa-heading-color);">游戏盈利(CG)告警检查</h2>
+                        <h2 style="margin:0 0 2px;font-size:22px;color:var(--qa-heading-color);">游戏盈利(CG)告警检查</h2>
                         <p style="margin:0;font-size:13px;color:var(--qa-subtext-color);">
                             验证 allGameProfitAlerts（game-profit）COLORGAME 的普通告警与连续告警逻辑
                         </p>
@@ -40,15 +40,6 @@
                                 </el-button>
                             </template>
 
-                            <!-- 状态 badge：仅在有异常时提示，「全部一致」与条数不再显示 -->
-                            <template v-if="!list._isEditingName && list.records && list.records.length > 0 && getMatchCount(list).fail > 0">
-                                <div style="flex:1;" />
-                                <span class="list-status-badge badge-fail">✗ {{ getMatchCount(list).fail }} 条异常</span>
-                            </template>
-                            <template v-else-if="!list._isEditingName && (!list.records || list.records.length === 0)">
-                                <div style="flex:1;" />
-                                <span class="list-status-badge badge-empty">暂无数据</span>
-                            </template>
                         </div>
                     </template>
 
@@ -102,6 +93,19 @@
                             />
                         </div>
                         <div class="panel-right">
+                            <span class="save-status" style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#909399; margin-right:8px;">
+                                <template v-if="list._saveState === 'saving'">
+                                    <el-icon class="is-loading"><Loading /></el-icon> 保存中…
+                                </template>
+                                <template v-else-if="list._saveState === 'error'">
+                                    <el-icon color="#F56C6C"><CircleClose /></el-icon>
+                                    <span style="color:#F56C6C;">保存失败</span>
+                                    <el-button link type="primary" @click="saveList(list)">重试</el-button>
+                                </template>
+                                <template v-else>
+                                    <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="list._savedAt"> {{ list._savedAt }}</template>
+                                </template>
+                            </span>
                             <el-upload action="#" :auto-upload="false" :show-file-list="false"
                                 :on-change="(file) => handleImport(file, list)">
                                 <el-button type="warning" plain>
@@ -109,7 +113,7 @@
                                 </el-button>
                             </el-upload>
                             <el-button type="info" @click="addRow(list)">手工新增</el-button>
-                            <el-button type="primary" :loading="list._isSaving" @click="saveList(list, true)">保存列表数据</el-button>
+                            <el-divider direction="vertical" style="height:20px; margin:0 6px;" />
                             <el-button type="danger" plain @click="removeList(list._id)">删除</el-button>
                         </div>
                     </div>
@@ -139,6 +143,7 @@
                             </el-tooltip>
                             <el-tooltip placement="bottom"
                                 :content="globalQAConfig.syncStartTime ? '已在质检配置中设定，子页面不支持修改' : '只导入告警时间 ≥ 此时间的数据，留空 = 不过滤'">
+                                <span style="display:inline-block;">
                                 <el-date-picker
                                     v-model="list.syncStartTime"
                                     type="datetime"
@@ -152,6 +157,7 @@
                                     :model-value="globalQAConfig.syncStartTime || list.syncStartTime"
                                     @update:model-value="v => { if (!globalQAConfig.syncStartTime) { list.syncStartTime = v; saveList(list, false) } }"
                                 />
+                                </span>
                             </el-tooltip>
                             <el-divider direction="vertical" />
                             <el-tooltip
@@ -328,13 +334,13 @@
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="Current Bet" min-width="115">
+                        <el-table-column label="当前投注" min-width="115">
                             <template #default="{ row }">
                                 <el-input-number v-model="row.currentBet" :controls="false" size="small" style="width:100%" />
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="Bet Median" min-width="115">
+                        <el-table-column label="投注中位数" min-width="115">
                             <template #default="{ row }">
                                 <el-input-number v-model="row.betMedian" :controls="false" size="small" style="width:100%" />
                             </template>
@@ -352,31 +358,31 @@
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="Deviation" min-width="110">
+                        <el-table-column label="偏差" min-width="110">
                             <template #default="{ row }">
                                 <el-input-number v-model="row.rtpDeviation" :controls="false" :precision="2" size="small" style="width:100%" />
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="Current GGR" min-width="130">
+                        <el-table-column label="当前GGR" min-width="130">
                             <template #default="{ row }">
                                 <el-input-number v-model="row.currentGgr" :controls="false" size="small" style="width:100%" />
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="Last GGR" min-width="130">
+                        <el-table-column label="上次GGR" min-width="130">
                             <template #default="{ row }">
                                 <el-input-number v-model="row.lastGgr" :controls="false" size="small" style="width:100%" />
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="Bet Count" min-width="115">
+                        <el-table-column label="投注笔数" min-width="115">
                             <template #default="{ row }">
                                 <el-input-number v-model="row.currentBetCount" :controls="false" size="small" style="width:100%" />
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="Avg Bet Count" min-width="120">
+                        <el-table-column label="平均投注笔数" min-width="120">
                             <template #default="{ row }">
                                 <el-input-number v-model="row.avgBetCount" :controls="false" size="small" style="width:100%" />
                             </template>
@@ -440,10 +446,12 @@
                         <el-table-column width="72" align="center">
                             <template #header>逻辑一致</template>
                             <template #default="{ row }">
-                                <span v-if="row.ignored" style="color:#c0c4cc;">—</span>
-                                <el-icon v-else-if="row.devResult && isMatchW(row, list)" color="var(--qa-pass)" size="16"><CircleCheck /></el-icon>
-                                <el-icon v-else-if="row.devResult" color="var(--qa-fail)" size="16"><CircleClose /></el-icon>
-                                <span v-else style="color:#c0c4cc;">?</span>
+                                <el-tag v-if="row.ignored" type="info" size="small">—</el-tag>
+                                <template v-else-if="row.devResult">
+                                    <el-tag v-if="isMatchW(row, list)" type="success" size="small">✓ 一致</el-tag>
+                                    <el-tag v-else type="danger" size="small">✗ 异常</el-tag>
+                                </template>
+                                <el-tag v-else type="info" size="small">待判断</el-tag>
                             </template>
                         </el-table-column>
 
@@ -470,7 +478,7 @@
                             :page-sizes="[30, 50, 100, 200]"
                             :total="getFilteredRecords(list).length"
                             layout="total, sizes, prev, pager, next, jumper"
-                            background small
+                            background
                         />
                     </div>
 
@@ -491,7 +499,7 @@ import * as XLSX from 'xlsx'
 import { ElNotification, ElMessageBox } from 'element-plus'
 import {
     Plus, Edit, Check, Upload, DocumentAdd, InfoFilled,
-    CircleCheck, CircleClose, Warning, Timer, ArrowDown
+    CircleCheck, CircleClose, Warning, Timer, ArrowDown, Loading
 } from '@element-plus/icons-vue'
 
 const API = 'http://localhost:3000/api'
@@ -578,6 +586,8 @@ const initList = l => Object.assign(l, {
     _tempName:      l.listName,
     _isEditingName: false,
     _isSaving:      false,
+    _saveState:     'idle',
+    _savedAt:       null,
     _currentPage:   1,
     _pageSize:      30,
     _selectedRows:  [],
@@ -601,6 +611,7 @@ const loadLists = async () => {
         })
         const saved = loadCollapseState()
         activeLists.value = saved || allLists.value.slice(0, 1).map(l => l._id)
+        allLists.value.forEach(attachAutoSave)
         allLists.value.forEach(restoreSyncState)
     } catch {} finally { isPageLoading.value = false }
 }
@@ -613,6 +624,7 @@ const createNewList = () => {
         if (!value?.trim()) return
         const { data } = await axios.post(`${API}/game-profit-lists`, { listName: value.trim(), rcBaseUrl: '', records: [] })
         allLists.value.push(initList(data))
+        attachAutoSave(allLists.value[allLists.value.length - 1])
         activeLists.value = [...activeLists.value, data._id]
     }).catch(() => {})
 }
@@ -624,10 +636,14 @@ const removeList = id => ElMessageBox.confirm('确定删除此列表？', '删�
     if (list) stopAutoSync(list)
     await axios.delete(`${API}/game-profit-lists/${id}`)
     allLists.value = allLists.value.filter(l => l._id !== id)
+    ElNotification.success({ message: '列表已删除', position: 'bottom-right' })
 }).catch(() => {})
 
-const saveList = async (list, show) => {
-    list._isSaving = true
+// ── 自动保存：列表数据/配置一变就存，带状态反馈，无需手动点保存 ────────────────
+const _saveTimers = new Map()
+
+const saveList = async (list) => {
+    list._saveState = 'saving'
     try {
         await axios.put(`${API}/game-profit-lists/${list._id}`, {
             listName: list.listName,
@@ -645,8 +661,30 @@ const saveList = async (list, show) => {
                 devResult: r.devResult, ignored: r.ignored,
             }))
         })
-        if (show) ElNotification.success({ message: '保存成功', position: 'bottom-right' })
-    } finally { list._isSaving = false }
+        list._saveState = 'idle'
+        list._savedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } catch (e) {
+        list._saveState = 'error'
+        console.error('[saveList] 保存失败:', e)
+    }
+}
+
+/** 防抖保存：连续改动 700ms 后落库一次 */
+const queueSave = (list) => {
+    list._saveState = 'saving'
+    clearTimeout(_saveTimers.get(list._id))
+    _saveTimers.set(list._id, setTimeout(() => saveList(list), 700))
+}
+
+/** 给列表挂自动保存监听：records / 关联配置 / RC地址 / 忽略条件2 / 起始时间 任一变化即存 */
+const attachAutoSave = (list) => {
+    if (list._autosaveOn) return
+    list._autosaveOn = true
+    watch(
+        () => [list.records, list.configId, list.rcBaseUrl, list.ignoreC2, list.syncStartTime],
+        () => queueSave(list),
+        { deep: true }
+    )
 }
 
 const startEditName    = l => { l._tempName = l.listName; l._isEditingName = true }

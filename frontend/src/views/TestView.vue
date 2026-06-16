@@ -7,11 +7,11 @@
                         <div class="page-type-accent" :style="{ background: typeColor }"></div>
                         <div>
                             <h2 class="page-card-title">{{ pageTitle }}</h2>
-                            <p class="page-card-subtitle">告警逻辑质检 · typeId {{ typeId }}</p>
+                            <p class="page-card-subtitle">校验 {{ ALERT_TYPE_MAP[typeId] }} 的告警触发与连续告警逻辑</p>
                         </div>
                     </div>
                     <el-button type="primary" @click="createNewList" size="default">
-                        <el-icon style="margin-right: 5px;"><Plus /></el-icon> 新增测试列表
+                        <el-icon style="margin-right: 5px;"><Plus /></el-icon> 新增列表
                     </el-button>
                 </div>
             </template>
@@ -38,15 +38,6 @@
                                 </el-button>
                             </template>
 
-                            <!-- 状态 badge：仅在有异常时提示，「全部一致」与条数不再显示 -->
-                            <template v-if="!list._isEditingName && list.records && list.records.length > 0 && getMatchCount(list).fail > 0">
-                                <div style="flex:1;" />
-                                <span class="list-status-badge badge-fail">✗ {{ getMatchCount(list).fail }} 条异常</span>
-                            </template>
-                            <template v-else-if="!list._isEditingName && (!list.records || list.records.length === 0)">
-                                <div style="flex:1;" />
-                                <span class="list-status-badge badge-empty">暂无数据</span>
-                            </template>
                         </div>
                     </template>
 
@@ -80,6 +71,19 @@
                             </el-popover>
                         </div>
                         <div class="panel-right">
+                            <span class="save-status" style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#909399; margin-right:8px;">
+                                <template v-if="list._saveState === 'saving'">
+                                    <el-icon class="is-loading"><Loading /></el-icon> 保存中…
+                                </template>
+                                <template v-else-if="list._saveState === 'error'">
+                                    <el-icon color="#F56C6C"><CircleClose /></el-icon>
+                                    <span style="color:#F56C6C;">保存失败</span>
+                                    <el-button link type="primary" @click="saveList(list)">重试</el-button>
+                                </template>
+                                <template v-else>
+                                    <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="list._savedAt"> {{ list._savedAt }}</template>
+                                </template>
+                            </span>
                             <el-upload action="#" :auto-upload="false" :show-file-list="false"
                                 :on-change="(file) => handleImportPreview(file, list)">
                                 <el-button type="warning" plain>
@@ -87,7 +91,7 @@
                                 </el-button>
                             </el-upload>
                             <el-button type="info" @click="addRow(list)">手工新增</el-button>
-                            <el-button type="primary" :loading="list._isSaving" @click="saveList(list, true)">保存列表数据</el-button>
+                            <el-divider direction="vertical" style="height:20px; margin:0 6px;" />
                             <el-button type="danger" plain @click="removeList(list._id)">删除</el-button>
                         </div>
                     </div>
@@ -118,6 +122,7 @@
                             <!-- 同步起始时间 -->
                             <el-tooltip placement="bottom"
                                 :content="globalQAConfig.syncStartTime ? '已在质检配置中设定，子页面不支持修改' : '只导入告警时间 ≥ 此时间的数据，留空 = 不过滤'">
+                                <span style="display:inline-block;">
                                 <el-date-picker
                                     v-model="list.syncStartTime"
                                     type="datetime"
@@ -131,6 +136,7 @@
                                     :model-value="globalQAConfig.syncStartTime || list.syncStartTime"
                                     @update:model-value="v => { if (!globalQAConfig.syncStartTime) { list.syncStartTime = v; saveList(list, false) } }"
                                 />
+                                </span>
                             </el-tooltip>
                             <el-divider direction="vertical" />
                             <el-tooltip
@@ -315,16 +321,14 @@
 
                         <el-table-column :label="val1Label" min-width="120">
                             <template #default="scope">
-                                <span v-if="scope.row.val1 === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="scope.row.val1" :controls="false" size="small" style="width:100%" />
+                                <el-input-number v-model="scope.row.val1" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
                         <!-- val2 — 标准类型 (typeId 1-7) -->
                         <el-table-column v-if="typeId !== 9" :label="val2Label" min-width="120">
                             <template #default="scope">
-                                <span v-if="scope.row.val2 === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="scope.row.val2" :controls="false" size="small" style="width:100%" />
+                                <el-input-number v-model="scope.row.val2" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
@@ -332,32 +336,27 @@
                         <template v-if="typeId === 9">
                             <el-table-column label="当前存款额" min-width="110">
                                 <template #default="scope">
-                                    <span v-if="scope.row.depositAmount === null" class="field-missing">⚠ 未抓到</span>
-                                    <el-input-number v-else v-model="scope.row.depositAmount" :controls="false" size="small" style="width:100%" />
+                                    <el-input-number v-model="scope.row.depositAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="当前提款额" min-width="110">
                                 <template #default="scope">
-                                    <span v-if="scope.row.withdrawalAmount === null" class="field-missing">⚠ 未抓到</span>
-                                    <el-input-number v-else v-model="scope.row.withdrawalAmount" :controls="false" size="small" style="width:100%" />
+                                    <el-input-number v-model="scope.row.withdrawalAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="Last 存提差" min-width="110">
                                 <template #default="scope">
-                                    <span v-if="scope.row.lastNetflowAmount === null" class="field-missing">⚠ 未抓到</span>
-                                    <el-input-number v-else v-model="scope.row.lastNetflowAmount" :controls="false" size="small" style="width:100%" />
+                                    <el-input-number v-model="scope.row.lastNetflowAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="Last 存款额" min-width="110">
                                 <template #default="scope">
-                                    <span v-if="scope.row.lastDepositAmount === null" class="field-missing">⚠ 未抓到</span>
-                                    <el-input-number v-else v-model="scope.row.lastDepositAmount" :controls="false" size="small" style="width:100%" />
+                                    <el-input-number v-model="scope.row.lastDepositAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="Last 提款额" min-width="110">
                                 <template #default="scope">
-                                    <span v-if="scope.row.lastWithdrawalAmount === null" class="field-missing">⚠ 未抓到</span>
-                                    <el-input-number v-else v-model="scope.row.lastWithdrawalAmount" :controls="false" size="small" style="width:100%" />
+                                    <el-input-number v-model="scope.row.lastWithdrawalAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="下降金额" width="100" align="right">
@@ -476,11 +475,12 @@
                         <el-table-column width="80" align="center">
                             <template #header>逻辑一致</template>
                             <template #default="scope">
-                                <el-tag v-if="!scope.row.devResult" size="small" type="info">待判断</el-tag>
-                                <el-tag
-                                    v-else-if="checkLogicMatch(scope.row, list.records.indexOf(scope.row), list)"
-                                    size="small" type="success">✓ 一致</el-tag>
-                                <el-tag v-else size="small" type="danger">✗ 异常</el-tag>
+                                <el-tag v-if="scope.row.ignored" type="info" size="small">—</el-tag>
+                                <template v-else-if="scope.row.devResult">
+                                    <el-tag v-if="checkLogicMatch(scope.row, list.records.indexOf(scope.row), list)" type="success" size="small">✓ 一致</el-tag>
+                                    <el-tag v-else type="danger" size="small">✗ 异常</el-tag>
+                                </template>
+                                <el-tag v-else type="info" size="small">待判断</el-tag>
                             </template>
                         </el-table-column>
 
@@ -586,7 +586,7 @@ import { useRoute } from 'vue-router'
 import axios from 'axios'
 import { ElNotification, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
-import { CircleCheck, CircleClose, Plus, Edit, Check, Upload, InfoFilled, Warning, DocumentAdd, ArrowDown } from '@element-plus/icons-vue'
+import { CircleCheck, CircleClose, Loading, Plus, Edit, Check, Upload, InfoFilled, Warning, DocumentAdd, ArrowDown } from '@element-plus/icons-vue'
 
 import { ALERT_TYPE_MAP, PAGE_TITLES, TYPE_DISPLAY_NAMES, CONT_TYPE_OPTIONS, getVal1Label, getVal2Label, getRatioLabel } from '../logic/alertTypes.js'
 import { calcNormalResult, calcContResult, calcLogicMatch, getContResultColor } from '../logic/alertLogic.js'
@@ -887,6 +887,8 @@ onMounted(async () => {
             ...l,
             _tempName: l.listName,
             _isSaving: false,
+            _saveState: 'idle',
+            _savedAt: null,
             _currentPage: 1,
             _pageSize: 30,
             _customPageSize: null,
@@ -896,6 +898,7 @@ onMounted(async () => {
             _isSyncingNow: false,
             _dateRange: null,
         }))
+        allLists.value.forEach(attachAutoSave)
         // Restore collapse state from localStorage; default to first list open
         const savedCollapse = loadCollapseState()
         if (savedCollapse && savedCollapse.length > 0) {
@@ -998,16 +1001,42 @@ const checkLogicMatch = (row, absIdx, list) => {
 
 // ─── List CRUD ───────────────────────────────────────────────────────────────
 
-const saveList = async (list, show) => {
-    list._isSaving = true
+// ── 自动保存：列表数据/配置一变就存，带状态反馈，无需手动点保存 ────────────────
+const _saveTimers = new Map()
+
+const saveList = async (list) => {
+    list._saveState = 'saving'
     try {
         // eslint-disable-next-line no-unused-vars
-        const { _tempName, _isSaving, _currentPage, _pageSize, _customPageSize, _isEditingName,
-                _selectedRows, _syncEnabled, _lastSyncAt, _isSyncingNow,
+        const { _tempName, _isSaving, _saveState, _savedAt, _autosaveOn,
+                _currentPage, _pageSize, _customPageSize, _isEditingName,
+                _selectedRows, _syncEnabled, _lastSyncAt, _isSyncingNow, _dateRange,
                 ...payload } = list
         await axios.post(`${API}/test-lists`, payload)
-        if (show) ElNotification.success({ message: '保存成功', position: 'bottom-right' })
-    } finally { list._isSaving = false }
+        list._saveState = 'idle'
+        list._savedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } catch (e) {
+        list._saveState = 'error'
+        console.error('[saveList] 保存失败:', e)
+    }
+}
+
+/** 防抖保存：连续改动 700ms 后落库一次 */
+const queueSave = (list) => {
+    list._saveState = 'saving'
+    clearTimeout(_saveTimers.get(list._id))
+    _saveTimers.set(list._id, setTimeout(() => saveList(list), 700))
+}
+
+/** 给列表挂自动保存监听：records / 关联配置 / RC地址 / 起始时间 任一变化即存 */
+const attachAutoSave = (list) => {
+    if (list._autosaveOn) return
+    list._autosaveOn = true
+    watch(
+        () => [list.records, list.configId, list.rcBaseUrl, list.syncStartTime],
+        () => queueSave(list),
+        { deep: true }
+    )
 }
 
 const addRow = (list) => {
@@ -1024,14 +1053,20 @@ const addRow = (list) => {
     list._currentPage = 1
 }
 
-const createNewList = () => ElMessageBox.prompt('输入列表名').then(async ({ value }) => {
+const createNewList = () => ElMessageBox.prompt('为新列表起个名字，用于区分不同环境或场景', '新增列表', {
+    confirmButtonText: '创建', cancelButtonText: '取消',
+    inputPlaceholder: '例：测试站 / 正式站',
+    inputValidator: v => v?.trim() ? true : '名称不能为空',
+}).then(async ({ value }) => {
     const res = await axios.post(`${API}/test-lists`, { typeId, listName: value, records: [] })
     allLists.value.push({
         ...res.data, _tempName: res.data.listName,
-        _isSaving: false, _currentPage: 1, _pageSize: 30, _customPageSize: null, _selectedRows: [],
+        _isSaving: false, _saveState: 'idle', _savedAt: null,
+        _currentPage: 1, _pageSize: 30, _customPageSize: null, _selectedRows: [],
         _syncEnabled: false, _lastSyncAt: null, _isSyncingNow: false
     })
-})
+    attachAutoSave(allLists.value[allLists.value.length - 1])
+}).catch(() => {})
 
 const applyCustomPageSize = (list) => {
     const n = list._customPageSize
@@ -1110,6 +1145,7 @@ const removeList = (id) => ElMessageBox.confirm('确定删除此列表？', '删
     if (list) stopAutoSync(list)
     await axios.delete(`${API}/test-lists/${id}`)
     allLists.value = allLists.value.filter(l => l._id !== id)
+    ElNotification.success({ message: '列表已删除', position: 'bottom-right' })
 })
 
 const startEditName = (l) => l._isEditingName = true
@@ -1421,14 +1457,14 @@ const confirmImport = () => {
 }
 .page-card-title {
     margin: 0;
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--qa-heading-color);
     line-height: 1.2;
 }
 .page-card-subtitle {
     margin: 2px 0 0;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--qa-subtext-color);
 }
 

@@ -128,6 +128,7 @@ const SyncCacheSchema = new mongoose.Schema({
     transaction: { type: Array, default: [] },
     bet:         { type: Array, default: [] },
     gameProfit:  { type: Array, default: [] },
+    reward:      { type: Array, default: [] },   // /rewardAlerts：优惠同比(11)/环比(12) 原始记录
     updatedAt:   { type: String, default: null },
 }, { timestamps: false, versionKey: false })
 

@@ -38,7 +38,7 @@
                     <div class="collapse-header">
                         <template v-if="!cfg._isEditingName">
                             <span class="cfg-name">{{ cfg.name || '未命名配置' }}</span>
-                            <el-button v-if="cfg._isEditing" link type="primary" class="edit-name-btn" @click.stop="startEditName(cfg)">
+                            <el-button link type="primary" class="edit-name-btn" @click.stop="startEditName(cfg)">
                                 <el-icon><Edit /></el-icon>
                             </el-button>
                         </template>
@@ -54,17 +54,22 @@
                             </el-button>
                         </template>
                         <div style="flex: 1;" />
-                        <template v-if="!cfg._isEditing">
-                            <el-button size="small" @click.stop="enterEditMode(cfg)">编辑</el-button>
-                            <el-button type="danger" plain size="small"
-                                @click.stop="deleteConfig(cfg._id)">删除</el-button>
-                        </template>
-                        <template v-else>
-                            <el-button type="success" size="small" :loading="cfg._isSaving"
-                                @click.stop="saveConfig(cfg)">保存</el-button>
-                            <el-button plain size="small"
-                                @click.stop="cancelEditMode(cfg)">取消</el-button>
-                        </template>
+                        <span class="save-status" style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#909399;" @click.stop>
+                            <template v-if="cfg._saveState === 'saving'">
+                                <el-icon class="is-loading"><Loading /></el-icon> 保存中…
+                            </template>
+                            <template v-else-if="cfg._saveState === 'error'">
+                                <el-icon color="#F56C6C"><CircleClose /></el-icon>
+                                <span style="color:#F56C6C;">保存失败</span>
+                                <el-button link type="primary" @click="saveConfig(cfg)">重试</el-button>
+                            </template>
+                            <template v-else>
+                                <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="cfg._savedAt"> {{ cfg._savedAt }}</template>
+                            </template>
+                        </span>
+                        <el-divider direction="vertical" style="height:18px; margin:0 8px;" />
+                        <el-button type="danger" plain size="small"
+                            @click.stop="deleteConfig(cfg._id)">删除</el-button>
                     </div>
                 </template>
 
@@ -85,7 +90,7 @@
                         <div class="param-row">
                             <div class="param-row-label">持续时间（分钟）</div>
                             <el-input-number v-model="cfg.durationMin" :min="1" :step="5"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                     </template>
 
@@ -111,12 +116,12 @@
                         <div class="param-row">
                             <div class="param-row-label">连续告警倍数（上限）</div>
                             <el-input-number v-model="cfg.multiUpper" :min="1" :step="0.05" :precision="2"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">连续告警倍数（下限）</div>
                             <el-input-number v-model="cfg.multiLower" :min="0" :max="1" :step="0.05" :precision="2"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                     </template>
 
@@ -124,18 +129,18 @@
                     <template v-if="[5, 6, 7].includes(Number(activeTab))">
                         <div class="param-row">
                             <div class="param-row-label">比例</div>
-                            <el-input-number v-model="cfg.ratioLimit" :min="0" :step="0.1" :precision="2"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                            <el-input-number v-model="cfg.ratioLimit" :min="0" :step="0.001" :precision="3"
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">连续告警倍数</div>
-                            <el-input-number v-model="cfg.ratioMulti" :min="0" :step="0.1" :precision="2"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                            <el-input-number v-model="cfg.ratioMulti" :min="0" :step="0.001" :precision="3"
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">告警窗口（分钟）</div>
                             <el-input-number v-model="cfg.alertWindow" :min="1" :step="5"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                     </template>
 
@@ -150,7 +155,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.xThreshold" :precision="1" :step="1"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">
@@ -161,7 +166,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.yThreshold" :min="0" :precision="1" :step="1"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">
@@ -172,7 +177,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.alertInterval" :min="1" :step="5"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                     </template>
 
@@ -187,7 +192,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.alertInterval" :min="1" :step="5"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">
@@ -198,7 +203,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.yThreshold" :min="0" :step="1" :precision="0"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                     </template>
 
@@ -213,7 +218,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.xThreshold" :min="0" :step="1000" :precision="0"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">日累计存提差比较</div>
@@ -233,7 +238,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.alertInterval" :min="1" :step="5"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                     </template>
 
@@ -248,7 +253,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.startThreshold" :min="0" :step="1" :precision="0"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">
@@ -259,7 +264,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.mult7" :min="1" :step="0.1" :precision="2"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">
@@ -270,7 +275,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.mult30" :min="1" :step="0.1" :precision="2"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                     </template>
 
@@ -285,7 +290,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.alertInterval" :min="1" :step="5"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">
@@ -296,7 +301,7 @@
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.multLast" :min="1" :step="0.1" :precision="2"
-                                controls-position="right" style="width:160px;" :disabled="!cfg._isEditing" />
+                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
                         </div>
                     </template>
 
@@ -318,7 +323,7 @@
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { ElNotification, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Check, Close, InfoFilled } from '@element-plus/icons-vue'
+import { Plus, Edit, Check, Close, InfoFilled, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 
 const API = 'http://localhost:3000/api'
 const activeTab = ref('1')
@@ -368,9 +373,8 @@ const loadConfigs = async () => {
             alertInterval:  c.alertInterval ?? 60,
             _isEditingName: false,
             _tempName:      c.name,
-            _isSaving:      false,
-            _isEditing:     false,
-            _original:      null,
+            _saveState:     'idle',
+            _savedAt:       null,
         }))
         activeCol.value = configs.value.length > 0 ? [configs.value[0]._id] : []
     } finally {
@@ -378,23 +382,11 @@ const loadConfigs = async () => {
     }
 }
 
-const enterEditMode = (cfg) => {
-    cfg._original = {
-        durationMin: cfg.durationMin, multiUpper: cfg.multiUpper, multiLower: cfg.multiLower,
-        ratioLimit: cfg.ratioLimit, ratioMulti: cfg.ratioMulti, alertWindow: cfg.alertWindow,
-        xThreshold: cfg.xThreshold, yThreshold: cfg.yThreshold,
-        alertInterval: cfg.alertInterval,
-    }
-    cfg._isEditing = true
-}
-
-const cancelEditMode = (cfg) => {
-    if (cfg._original) {
-        Object.assign(cfg, cfg._original)
-        cfg._original = null
-    }
-    cfg._isEditing = false
-    cfg._isEditingName = false
+const _saveTimers = new Map()
+const queueSaveCfg = (cfg) => {
+    cfg._saveState = 'saving'
+    clearTimeout(_saveTimers.get(cfg._id))
+    _saveTimers.set(cfg._id, setTimeout(() => saveConfig(cfg), 700))
 }
 
 onMounted(() => onTabChange(activeTab.value))
@@ -425,7 +417,7 @@ const addConfig = () => {
           : tid === 12 ? { typeId: tid, name: value, alertInterval: 30, multLast: 1.2 }
           : { typeId: tid, name: value, durationMin: 30, multiUpper: 1.15, multiLower: 0.85, ratioLimit: 1.5, ratioMulti: 0.5, alertWindow: 30 }
         )
-        const newCfg = { ...res.data, _isEditingName: false, _tempName: res.data.name, _isSaving: false, _isEditing: true, _original: null }
+        const newCfg = { ...res.data, _isEditingName: false, _tempName: res.data.name, _saveState: 'idle', _savedAt: null }
         configs.value.push(newCfg)
         activeCol.value = [...activeCol.value, newCfg._id]
         ElNotification.success({ message: '配置创建成功', position: 'bottom-right' })
@@ -433,7 +425,7 @@ const addConfig = () => {
 }
 
 const saveConfig = async (cfg) => {
-    cfg._isSaving = true
+    cfg._saveState = 'saving'
     try {
         // Build payload explicitly to avoid reactive proxy spread issues
         const payload = {
@@ -452,13 +444,10 @@ const saveConfig = async (cfg) => {
             alertInterval: cfg.alertInterval ?? 60,
         }
         await axios.post(`${API}/configs`, payload)
-        cfg._isEditing = false
-        cfg._original = null
-        ElNotification.success({ message: `「${cfg.name}」已保存`, position: 'bottom-right' })
+        cfg._saveState = 'idle'
+        cfg._savedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     } catch {
-        ElNotification.error({ message: '保存失败，请重试', position: 'bottom-right' })
-    } finally {
-        setTimeout(() => cfg._isSaving = false, 300)
+        cfg._saveState = 'error'
     }
 }
 

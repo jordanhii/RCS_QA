@@ -75,7 +75,19 @@
                                 </el-button>
                             </el-upload>
                             <el-button type="info" @click="addRow(list)">手工新增</el-button>
-                            <el-button type="primary" :loading="list._isSaving" @click="saveList(list, true)">保存列表数据</el-button>
+                            <span class="save-status" style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#909399; margin:0 4px;">
+                                <template v-if="list._saveState === 'saving'">
+                                    <el-icon class="is-loading"><Loading /></el-icon> 保存中…
+                                </template>
+                                <template v-else-if="list._saveState === 'error'">
+                                    <el-icon color="#F56C6C"><CircleClose /></el-icon>
+                                    <span style="color:#F56C6C;">保存失败</span>
+                                    <el-button link type="primary" @click="saveList(list)">重试</el-button>
+                                </template>
+                                <template v-else>
+                                    <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="list._savedAt"> {{ list._savedAt }}</template>
+                                </template>
+                            </span>
                             <el-button type="danger" plain @click="removeList(list._id)">删除</el-button>
                         </div>
                     </div>
@@ -242,7 +254,7 @@
                     <el-table :data="getPagedRecords(list)"
                         border size="small" style="width:100%;margin-top:8px;"
                         :row-key="(row) => row.alertId || list.records.indexOf(row)"
-                        :row-class-name="({ row }) => getRowClass(row, getCfg(list))"
+                        :row-class-name="({ row }) => getRowClass(list.records.indexOf(row), list.records, getCfg(list))"
                         @selection-change="rows => list._selectedRows = rows">
 
                         <el-table-column type="selection" width="40" fixed="left" reserve-selection />
@@ -328,8 +340,8 @@
                                 </el-tooltip>
                             </template>
                             <template #default="{ row }">
-                                <el-tag :type="calcNormalResult(row, getCfg(list)) === 'TRUE' ? 'success' : 'danger'" size="small">
-                                    {{ calcNormalResult(row, getCfg(list)) }}
+                                <el-tag :type="calcNormalResult(list.records.indexOf(row), list.records, getCfg(list)) === 'TRUE' ? 'success' : 'danger'" size="small">
+                                    {{ calcNormalResult(list.records.indexOf(row), list.records, getCfg(list)) }}
                                 </el-tag>
                             </template>
                         </el-table-column>
@@ -346,10 +358,12 @@
 
                         <el-table-column label="逻辑一致" width="72" align="center">
                             <template #default="{ row }">
-                                <span v-if="row.ignored" style="color:#c0c4cc;">—</span>
-                                <el-icon v-else-if="row.devResult && calcLogicMatch(row, getCfg(list))" color="var(--qa-pass)" size="16"><CircleCheck /></el-icon>
-                                <el-icon v-else-if="row.devResult" color="var(--qa-fail)" size="16"><CircleClose /></el-icon>
-                                <span v-else style="color:#c0c4cc;">?</span>
+                                <el-tag v-if="row.ignored" type="info" size="small">—</el-tag>
+                                <template v-else-if="row.devResult">
+                                    <el-tag v-if="calcLogicMatch(list.records.indexOf(row), list.records, getCfg(list))" type="success" size="small">✓ 一致</el-tag>
+                                    <el-tag v-else type="danger" size="small">✗ 异常</el-tag>
+                                </template>
+                                <el-tag v-else type="info" size="small">待判断</el-tag>
                             </template>
                         </el-table-column>
 
@@ -387,11 +401,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import axios from 'axios'
 import { ElNotification, ElMessageBox } from 'element-plus'
 import {
-    Plus, Edit, Check, Close, CircleCheck, CircleClose,
+    Plus, Edit, Check, Close, CircleCheck, CircleClose, Loading,
     Warning, DocumentAdd, InfoFilled, Upload, ArrowDown
 } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
@@ -547,6 +561,8 @@ const fetchLists = async () => {
             _isEditingName: false,
             _tempName:      l.listName,
             _isSaving:      false,
+            _saveState:     'idle',
+            _savedAt:       null,
             _syncEnabled:   false,
             _isSyncingNow:  false,
             _lastSyncAt:    '',
@@ -555,14 +571,18 @@ const fetchLists = async () => {
             _selectedRows:  [],
             _dateRange:     null,
         }))
+        allLists.value.forEach(attachAutoSave)
         if (allLists.value.length > 0) activeLists.value = [allLists.value[0]._id]
     } finally {
         isPageLoading.value = false
     }
 }
 
-const saveList = async (list, notify = true) => {
-    list._isSaving = true
+// ── 自动保存：列表数据/配置一变就存，带状态反馈，无需手动点保存 ────────────────
+const _saveTimers = new Map()
+
+const saveList = async (list) => {
+    list._saveState = 'saving'
     try {
         await axios.post(`${API}/test-lists`, {
             _id:       list._id,
@@ -572,12 +592,30 @@ const saveList = async (list, notify = true) => {
             rcBaseUrl: list.rcBaseUrl || '',
             records:   list.records,
         })
-        if (notify) ElNotification.success({ message: '保存成功', position: 'bottom-right', duration: 2000 })
-    } catch {
-        ElNotification.error({ message: '保存失败，请重试', position: 'bottom-right' })
-    } finally {
-        list._isSaving = false
+        list._saveState = 'idle'
+        list._savedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } catch (e) {
+        list._saveState = 'error'
+        console.error('[saveList] 保存失败:', e)
     }
+}
+
+/** 防抖保存：连续改动 700ms 后落库一次 */
+const queueSave = (list) => {
+    list._saveState = 'saving'
+    clearTimeout(_saveTimers.get(list._id))
+    _saveTimers.set(list._id, setTimeout(() => saveList(list), 700))
+}
+
+/** 给列表挂自动保存监听：records / 关联配置 / RC地址 / 起始时间 任一变化即存 */
+const attachAutoSave = (list) => {
+    if (list._autosaveOn) return
+    list._autosaveOn = true
+    watch(
+        () => [list.records, list.configId, list.rcBaseUrl, list.syncStartTime],
+        () => queueSave(list),
+        { deep: true }
+    )
 }
 
 const createNewList = async () => {
@@ -593,10 +631,12 @@ const createNewList = async () => {
         allLists.value.unshift({
             ...data,
             _isEditingName: false, _tempName: data.listName,
-            _isSaving: false, _syncEnabled: false, _isSyncingNow: false,
+            _isSaving: false, _saveState: 'idle', _savedAt: null,
+            _syncEnabled: false, _isSyncingNow: false,
             _lastSyncAt: '', _currentPage: 1, _pageSize: 50,
             _selectedRows: [], _dateRange: null,
         })
+        attachAutoSave(allLists.value[0])
         activeLists.value = [data._id]
     } catch {}
 }

@@ -64,8 +64,9 @@ export function normUrl(u) {
 
 export function getCacheForUrl(url) {
     const k = normUrl(url)
-    if (!syncCacheMap[k]) syncCacheMap[k] = { transaction: [], bet: [], gameProfit: [], updatedAt: null }
+    if (!syncCacheMap[k]) syncCacheMap[k] = { transaction: [], bet: [], gameProfit: [], reward: [], updatedAt: null }
     if (!syncCacheMap[k].gameProfit) syncCacheMap[k].gameProfit = []
+    if (!syncCacheMap[k].reward)     syncCacheMap[k].reward     = []
     return syncCacheMap[k]
 }
 
@@ -78,6 +79,7 @@ export async function restoreSyncCacheFromDb() {
                 transaction: doc.transaction || [],
                 bet:         doc.bet         || [],
                 gameProfit:  doc.gameProfit  || [],
+                reward:      doc.reward      || [],
                 updatedAt:   doc.updatedAt   || null,
             }
         }
@@ -91,7 +93,7 @@ function persistCacheToDb(normKey, entry) {
     SyncCacheDoc.findOneAndUpdate(
         { normUrl: normKey },
         { normUrl: normKey, transaction: entry.transaction, bet: entry.bet,
-          gameProfit: entry.gameProfit || [], updatedAt: entry.updatedAt },
+          gameProfit: entry.gameProfit || [], reward: entry.reward || [], updatedAt: entry.updatedAt },
         { upsert: true }
     ).catch(e => console.warn('⚠️  同步缓存持久化失败:', e.message))
 }
@@ -128,13 +130,14 @@ router.post('/sync-cache', (req, res) => {
     const { records, source, rcBaseUrl } = req.body
     if (!records || !Array.isArray(records))
         return res.status(400).json({ error: 'records array required' })
-    if (!source || !['transaction', 'bet', 'gameProfit'].includes(source))
-        return res.status(400).json({ error: 'source must be "transaction", "bet", or "gameProfit"' })
+    if (!source || !['transaction', 'bet', 'gameProfit', 'reward'].includes(source))
+        return res.status(400).json({ error: 'source must be "transaction", "bet", "gameProfit", or "reward"' })
     const k     = normUrl(rcBaseUrl)
     const cache = getCacheForUrl(rcBaseUrl)
-    if (source === 'transaction') cache.transaction = records
-    else if (source === 'bet')    cache.bet         = records
-    else                          cache.gameProfit  = records
+    if (source === 'transaction')      cache.transaction = records
+    else if (source === 'bet')         cache.bet         = records
+    else if (source === 'gameProfit')  cache.gameProfit  = records
+    else                               cache.reward      = records
     cache.updatedAt = new Date().toISOString()
 
     // LRU eviction：最多保留 20 个 URL 的缓存，超出时淘汰最老的
@@ -300,14 +303,94 @@ function resolveContTypeSrv(cur, prev, durationMin = 30) {
     return '前30分钟无告警'
 }
 
+// ── 优惠告警（/rewardAlerts）专用解析 ────────────────────────────────────────
+//
+// 优惠记录结构与存提款/投注完全不同：没有 alertMetadata 嵌套对象，
+// 数据塞在 alertContent 这个用 "\n" 分隔的字符串里，数字还带千分位逗号。
+// 时间字段是 alertCreateTime（UTC ISO，带 Z），需转成 +8 本地时间字符串，
+// 与其它告警页的 alertGeneratedTime（"YYYY-MM-DD HH:mm:ss" 本地时间）保持一致。
+//
+// 口径（已与用户确认）：直接存 RC 已算好的阈值，前端质检配置倍数设 1。
+//   环比(12) alertContent 8 段：
+//     [0]优惠类型 [1]今日累计优惠 [2]本N分钟 [3]本时段增长 [4]上N分钟 [5]倍数 [6]上时段增长×倍数 [7]今日第N个告警
+//   同比(11) alertContent 6 段：
+//     [0]优惠类型 [1]今日累计优惠 [2]前7天倍数 [3]前7天平均×倍数 [4]前30天倍数 [5]前30天平均×倍数
+const REWARD_TZ_OFFSET_MS = 8 * 3600 * 1000   // RC 显示用 +8
+
+function rewardLocalTime(raw) {
+    if (!raw || typeof raw !== 'string') return ''
+    // 已是本地格式（"YYYY-MM-DD HH:mm:ss"，无 T/Z）→ 原样返回
+    if (!/[TZ]/.test(raw)) return raw
+    const d = new Date(raw)
+    if (isNaN(d.getTime())) return raw
+    const t = new Date(d.getTime() + REWARD_TZ_OFFSET_MS)
+    const p = n => String(n).padStart(2, '0')
+    return `${t.getUTCFullYear()}-${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())} `
+         + `${p(t.getUTCHours())}:${p(t.getUTCMinutes())}:${p(t.getUTCSeconds())}`
+}
+
+/** 去千分位逗号后转数字；空/非数字 → null（前端显示 ⚠ 未抓到） */
+function rewardNum(s) {
+    if (s === undefined || s === null) return null
+    const v = String(s).replace(/,/g, '').trim()
+    if (v === '') return null
+    const n = Number(v)
+    return Number.isNaN(n) ? null : n
+}
+
+function formatRewardRecord(item, typeId) {
+    const alertId   = String(item.alertId ?? item.alertNumber ?? '')
+    const alertTime = rewardLocalTime(item.alertCreateTime || item.alertGeneratedTime || '')
+    const parts     = String(item.alertContent ?? '').split('\n')
+
+    const base = {
+        alertId, alertTime,
+        rewardType: String(parts[0] ?? '').trim(),
+        todayTotal: rewardNum(parts[1]),
+        // 优惠页上的记录都是 RC 已触发的告警 → RC 判断恒为 TRUE
+        devResult:  'TRUE',
+        ignored:    false,
+    }
+    if (typeId === 12) {
+        base.currentGrowth = rewardNum(parts[3])   // 本时段增长
+        base.lastGrowth    = rewardNum(parts[6])   // 上时段增长×倍数（已含倍数）
+        base.alertSeq      = rewardNum(parts[7])   // 今日第 N 个告警
+    } else {
+        base.avg7  = rewardNum(parts[3])           // 前7天平均×倍数
+        base.avg30 = rewardNum(parts[5])           // 前30天平均×倍数
+    }
+    return base
+}
+
 router.get('/sync-cache/:typeId', ah(async (req, res) => {
     const targetTypeId = Number(req.params.typeId)
     // 确保 captureConfig 已加载（首次或重启后可能尚未缓存）
     if (Object.keys(_captureConfigMap).length === 0) await refreshCaptureConfigCache()
     const urlParam     = req.query.url || ''
+
+    // ── 优惠同比(11) / 优惠环比(12)：数据来自 reward 缓存，走专用解析 ──────────
+    if (targetTypeId === 11 || targetTypeId === 12) {
+        const rewardRaw = urlParam
+            ? getCacheForUrl(urlParam).reward || []
+            : Object.values(syncCacheMap).flatMap(c => c.reward || [])
+        const records = rewardRaw
+            .filter(item => TYPE_ID_MAP[item.alertType] === targetTypeId)
+            .map(item => formatRewardRecord(item, targetTypeId))
+            .sort((a, b) => new Date(b.alertTime) - new Date(a.alertTime))
+        const updatedAt = urlParam
+            ? getCacheForUrl(urlParam).updatedAt
+            : Object.values(syncCacheMap).reduce((l, c) => (!l || (c.updatedAt && c.updatedAt > l)) ? c.updatedAt : l, null)
+        return res.json({ success: true, data: records, updatedAt, totalRaw: rewardRaw.length })
+    }
+
+    // 按 typeId 只在「对应接口」的缓存里搜索：投注类(6/7)来自 allBetAlerts，
+    // 其余存提款/存提差类来自 allTransactionAlerts。这样返回的 totalRaw 只反映相关接口的条数，
+    // 不会把无关接口（如 bet）也算进来，避免「抓取上限 1000、却显示 1200+」的困惑。
+    const BET_TYPES = new Set([6, 7])
+    const pickSrc = c => BET_TYPES.has(targetTypeId) ? (c.bet || []) : (c.transaction || [])
     const allRaw = urlParam
-        ? [...getCacheForUrl(urlParam).transaction, ...getCacheForUrl(urlParam).bet]
-        : Object.values(syncCacheMap).flatMap(c => [...c.transaction, ...c.bet])
+        ? pickSrc(getCacheForUrl(urlParam))
+        : Object.values(syncCacheMap).flatMap(pickSrc)
     const filtered = allRaw.filter(item => TYPE_ID_MAP[item.alertType] === targetTypeId)
     let records
     if ([3, 4].includes(targetTypeId)) {

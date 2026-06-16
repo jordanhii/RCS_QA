@@ -69,7 +69,7 @@
                         <span>24h 存提款额</span>
                     </el-menu-item>
 
-                    <div class="menu-group-label">投注比</div>
+                    <div class="menu-group-label">投/存比</div>
                     <el-menu-item index="/test/6">
                         <el-icon><Histogram /></el-icon>
                         <span>投/存比</span>
@@ -78,6 +78,8 @@
                         <el-icon><Histogram /></el-icon>
                         <span>投/存+惠比</span>
                     </el-menu-item>
+
+                    <div class="menu-group-label">优惠</div>
                     <el-menu-item index="/test/promo-yoy">
                         <el-icon><Histogram /></el-icon>
                         <span>优惠同比</span>

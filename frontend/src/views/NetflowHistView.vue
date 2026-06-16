@@ -3,9 +3,12 @@
         <el-card shadow="hover" class="main-card">
             <template #header>
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2 style="margin:0; color: var(--qa-heading-color);">存提差同比</h2>
+                    <div>
+                        <h2 style="margin:0 0 2px; font-size:22px; color: var(--qa-heading-color);">存提差同比</h2>
+                        <p style="margin:0;font-size:13px;color:var(--qa-subtext-color);">校验当日累计存提差与历史同期（昨日 / 上周 / 上月）的告警逻辑</p>
+                    </div>
                     <el-button type="primary" @click="createNewList" size="large">
-                        <el-icon style="margin-right: 5px;"><Plus /></el-icon> 新增测试列表
+                        <el-icon style="margin-right: 5px;"><Plus /></el-icon> 新增列表
                     </el-button>
                 </div>
             </template>
@@ -54,6 +57,19 @@
                             </el-popover>
                         </div>
                         <div class="panel-right">
+                            <span class="save-status" style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#909399; margin-right:8px;">
+                                <template v-if="list._saveState === 'saving'">
+                                    <el-icon class="is-loading"><Loading /></el-icon> 保存中…
+                                </template>
+                                <template v-else-if="list._saveState === 'error'">
+                                    <el-icon color="#F56C6C"><CircleClose /></el-icon>
+                                    <span style="color:#F56C6C;">保存失败</span>
+                                    <el-button link type="primary" @click="saveList(list)">重试</el-button>
+                                </template>
+                                <template v-else>
+                                    <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="list._savedAt"> {{ list._savedAt }}</template>
+                                </template>
+                            </span>
                             <el-upload action="#" :auto-upload="false" :show-file-list="false"
                                 :on-change="(file) => handleImportPreview(file, list)">
                                 <el-button type="warning" plain>
@@ -61,7 +77,7 @@
                                 </el-button>
                             </el-upload>
                             <el-button type="info" @click="addRow(list)">手工新增</el-button>
-                            <el-button type="primary" :loading="list._isSaving" @click="saveList(list, true)">保存列表数据</el-button>
+                            <el-divider direction="vertical" style="height:20px; margin:0 6px;" />
                             <el-button type="danger" plain @click="removeList(list._id)">删除</el-button>
                         </div>
                     </div>
@@ -91,6 +107,7 @@
                             </el-tooltip>
                             <el-tooltip placement="bottom"
                                 :content="globalQAConfig.syncStartTime ? '已在质检配置中设定，子页面不支持修改' : '只导入告警时间 ≥ 此时间的数据，留空 = 不过滤'">
+                                <span style="display:inline-block;">
                                 <el-date-picker
                                     v-model="list.syncStartTime"
                                     type="datetime"
@@ -104,6 +121,7 @@
                                     :model-value="globalQAConfig.syncStartTime || list.syncStartTime"
                                     @update:model-value="v => { if (!globalQAConfig.syncStartTime) { list.syncStartTime = v; saveList(list, false) } }"
                                 />
+                                </span>
                             </el-tooltip>
                             <el-divider direction="vertical" />
                             <el-tooltip
@@ -290,51 +308,47 @@
                         <!-- 3. 存提差金额 -->
                         <el-table-column label="存提差金额" min-width="120">
                             <template #default="scope">
-                                <span v-if="scope.row.val1 === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="scope.row.val1" :controls="false" size="small" style="width:100%" />
+                                <el-input-number v-model="scope.row.val1" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
                         <!-- 4. 存款额 -->
                         <el-table-column label="存款额" min-width="100">
                             <template #default="scope">
-                                <span v-if="scope.row.depositAmount === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="scope.row.depositAmount" :controls="false" size="small" style="width:100%" />
+                                <el-input-number v-model="scope.row.depositAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
                         <!-- 5. 提款额 -->
                         <el-table-column label="提款额" min-width="100">
                             <template #default="scope">
-                                <span v-if="scope.row.withdrawalAmount === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="scope.row.withdrawalAmount" :controls="false" size="small" style="width:100%" />
+                                <el-input-number v-model="scope.row.withdrawalAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
                         <!-- 6. 昨日-存提差 -->
                         <el-table-column label="昨日-存提差" min-width="120">
                             <template #default="scope">
-                                <span v-if="scope.row.historicalYesterday === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="scope.row.historicalYesterday" :controls="false" size="small" style="width:100%" />
+                                <el-input-number v-model="scope.row.historicalYesterday" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
                         <!-- 7. 上周-存提差 -->
                         <el-table-column label="上周-存提差" min-width="120">
                             <template #default="scope">
-                                <span v-if="scope.row.historicalLastWeek === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="scope.row.historicalLastWeek" :controls="false" size="small" style="width:100%" />
+                                <el-input-number v-model="scope.row.historicalLastWeek" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
                         <!-- 8. 上月-存提差 -->
                         <el-table-column label="上月-存提差" min-width="120">
                             <template #default="scope">
-                                <span v-if="scope.row.historicalLastMonth === null" class="field-missing">⚠ 未抓到</span>
-                                <el-input-number v-else v-model="scope.row.historicalLastMonth" :controls="false" size="small" style="width:100%" />
+                                <el-input-number v-model="scope.row.historicalLastMonth" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
+                        <!-- ── RC 系统判断 组 ────────────────────────────── -->
+                        <el-table-column label="RC 系统判断" align="center">
                         <!-- 9. < 昨日 (RC) -->
                         <el-table-column label="< 昨日" min-width="80" align="center">
                             <template #default="scope">
@@ -364,9 +378,12 @@
                                 </el-tag>
                             </template>
                         </el-table-column>
+                        </el-table-column>
 
+                        <!-- ── RCSQA 自算 组（用抓到的数据自算，与左侧 RC 判断对照）──── -->
+                        <el-table-column label="RCSQA 自算" align="center">
                         <!-- 12. < 昨日（RCSQA） -->
-                        <el-table-column label="< 昨日（RCSQA）" min-width="120" align="center">
+                        <el-table-column label="< 昨日" min-width="90" align="center">
                             <template #default="scope">
                                 <template v-if="calcLowerThan(scope.row.val1, scope.row.historicalYesterday) === null">
                                     <span class="field-missing">—</span>
@@ -378,7 +395,7 @@
                         </el-table-column>
 
                         <!-- 13. < 上周同天（RCSQA） -->
-                        <el-table-column label="< 上周同天（RCSQA）" min-width="140" align="center">
+                        <el-table-column label="< 上周同天" min-width="100" align="center">
                             <template #default="scope">
                                 <template v-if="calcLowerThan(scope.row.val1, scope.row.historicalLastWeek) === null">
                                     <span class="field-missing">—</span>
@@ -390,7 +407,7 @@
                         </el-table-column>
 
                         <!-- 14. < 上月同天（RCSQA） -->
-                        <el-table-column label="< 上月同天（RCSQA）" min-width="140" align="center">
+                        <el-table-column label="< 上月同天" min-width="100" align="center">
                             <template #default="scope">
                                 <template v-if="calcLowerThan(scope.row.val1, scope.row.historicalLastMonth) === null">
                                     <span class="field-missing">—</span>
@@ -399,6 +416,7 @@
                                     {{ calcLowerThan(scope.row.val1, scope.row.historicalLastMonth) }}
                                 </el-tag>
                             </template>
+                        </el-table-column>
                         </el-table-column>
 
                         <!-- 15. 告警结果 -->
@@ -440,14 +458,12 @@
                         <el-table-column width="80" align="center">
                             <template #header>逻辑一致</template>
                             <template #default="scope">
-                                <el-icon
-                                    v-if="calcLogicMatch(list.records.indexOf(scope.row), list.records, getCfg(list))"
-                                    color="var(--qa-pass)" size="22">
-                                    <CircleCheck />
-                                </el-icon>
-                                <el-icon v-else color="var(--qa-fail)" size="22">
-                                    <CircleClose />
-                                </el-icon>
+                                <el-tag v-if="scope.row.ignored" type="info" size="small">—</el-tag>
+                                <template v-else-if="scope.row.devResult">
+                                    <el-tag v-if="calcLogicMatch(list.records.indexOf(scope.row), list.records, getCfg(list))" type="success" size="small">✓ 一致</el-tag>
+                                    <el-tag v-else type="danger" size="small">✗ 异常</el-tag>
+                                </template>
+                                <el-tag v-else type="info" size="small">待判断</el-tag>
                             </template>
                         </el-table-column>
 
@@ -457,7 +473,7 @@
                                 <el-button
                                     :type="scope.row.ignored ? 'info' : 'warning'"
                                     link
-                                    @click="scope.row.ignored = !scope.row.ignored">
+                                    @click="scope.row.ignored = !scope.row.ignored; saveList(list, false)">
                                     {{ scope.row.ignored ? '恢复' : '忽略' }}
                                 </el-button>
                                 <el-button type="danger" link
@@ -547,7 +563,7 @@ import { ref, computed, onMounted, onBeforeUnmount, shallowRef, watch } from 'vu
 import axios from 'axios'
 import * as XLSX from 'xlsx'
 import { ElNotification, ElMessageBox } from 'element-plus'
-import { CircleCheck, CircleClose, Plus, Edit, Check, Upload, InfoFilled, Warning, DocumentAdd, ArrowDown } from '@element-plus/icons-vue'
+import { CircleCheck, CircleClose, Loading, Plus, Edit, Check, Upload, InfoFilled, Warning, DocumentAdd, ArrowDown } from '@element-plus/icons-vue'
 import { filterByAlertType, getTimeRange, mapExcelRows } from '../logic/importMapper.js'
 
 import {
@@ -815,6 +831,8 @@ onMounted(async () => {
             ...l,
             _tempName: l.listName,
             _isSaving: false,
+            _saveState: 'idle',
+            _savedAt: null,
             _currentPage: 1,
             _pageSize: 30,
             _customPageSize: null,
@@ -826,6 +844,7 @@ onMounted(async () => {
             _dateRange: null,
             _isEditingName: false,
         }))
+        allLists.value.forEach(attachAutoSave)
         const savedCollapse = loadCollapseState()
         if (savedCollapse && savedCollapse.length > 0) {
             activeLists.value = savedCollapse.filter(id => allLists.value.some(l => l._id === id))
@@ -882,16 +901,42 @@ const getRowClassName = (absIdx, records, cfg) => histGetRowClass(absIdx, record
 
 const getCfg = (list) => availableConfigs.value.find(c => c._id === list.configId)
 
-const saveList = async (list, show) => {
-    list._isSaving = true
+// ── 自动保存：列表数据/配置一变就存，带状态反馈，无需手动点保存 ────────────────
+const _saveTimers = new Map()
+
+const saveList = async (list) => {
+    list._saveState = 'saving'
     try {
         // eslint-disable-next-line no-unused-vars
-        const { _tempName, _isSaving, _currentPage, _pageSize, _customPageSize, _isEditingName,
+        const { _tempName, _isSaving, _saveState, _savedAt, _autosaveOn,
+                _currentPage, _pageSize, _customPageSize, _isEditingName,
                 _selectedRows, _syncEnabled, _lastSyncAt, _isSyncingNow, _isImportingSync,
                 _dateRange, ...payload } = list
         await axios.post(`${API}/test-lists`, payload)
-        if (show) ElNotification.success({ message: '保存成功', position: 'bottom-right' })
-    } finally { list._isSaving = false }
+        list._saveState = 'idle'
+        list._savedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } catch (e) {
+        list._saveState = 'error'
+        console.error('[saveList] 保存失败:', e)
+    }
+}
+
+/** 防抖保存：连续改动 700ms 后落库一次 */
+const queueSave = (list) => {
+    list._saveState = 'saving'
+    clearTimeout(_saveTimers.get(list._id))
+    _saveTimers.set(list._id, setTimeout(() => saveList(list), 700))
+}
+
+/** 给列表挂自动保存监听：records / 关联配置 / RC地址 / 起始时间 任一变化即存 */
+const attachAutoSave = (list) => {
+    if (list._autosaveOn) return
+    list._autosaveOn = true
+    watch(
+        () => [list.records, list.configId, list.rcBaseUrl, list.syncStartTime],
+        () => queueSave(list),
+        { deep: true }
+    )
 }
 
 const addRow = (list) => {
@@ -905,15 +950,21 @@ const addRow = (list) => {
     list._currentPage = 1
 }
 
-const createNewList = () => ElMessageBox.prompt('输入列表名').then(async ({ value }) => {
+const createNewList = () => ElMessageBox.prompt('为新列表起个名字，用于区分不同环境或场景', '新增列表', {
+    confirmButtonText: '创建', cancelButtonText: '取消',
+    inputPlaceholder: '例：测试站 / 正式站',
+    inputValidator: v => v?.trim() ? true : '名称不能为空',
+}).then(async ({ value }) => {
     const res = await axios.post(`${API}/test-lists`, { typeId: TYPE_ID, listName: value, records: [] })
     allLists.value.push({
         ...res.data, _tempName: res.data.listName,
-        _isSaving: false, _currentPage: 1, _pageSize: 30, _customPageSize: null, _selectedRows: [],
+        _isSaving: false, _saveState: 'idle', _savedAt: null,
+        _currentPage: 1, _pageSize: 30, _customPageSize: null, _selectedRows: [],
         _syncEnabled: false, _lastSyncAt: null, _isSyncingNow: false, _isImportingSync: false, /* keep for saveList destructure compat */
         _dateRange: null, _isEditingName: false,
     })
-})
+    attachAutoSave(allLists.value[allLists.value.length - 1])
+}).catch(() => {})
 
 const applyCustomPageSize = (list) => {
     const n = list._customPageSize
@@ -984,6 +1035,7 @@ const removeList = (id) => ElMessageBox.confirm('确定删除此列表？', '删
     if (list) stopAutoSync(list)
     await axios.delete(`${API}/test-lists/${id}`)
     allLists.value = allLists.value.filter(l => l._id !== id)
+    ElNotification.success({ message: '列表已删除', position: 'bottom-right' })
 })
 
 const startEditName = (l) => l._isEditingName = true

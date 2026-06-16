@@ -25,7 +25,7 @@
                                     <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
                                 </el-tooltip>
                             </div>
-                            <el-select v-model="form.syncIntervalMin" style="width: 160px;" :disabled="!isEditing">
+                            <el-select v-model="form.syncIntervalMin" style="width: 160px;" @change="queueSave">
                                 <el-option :value="1"  label="每 1 分钟" />
                                 <el-option :value="2"  label="每 2 分钟" />
                                 <el-option :value="5"  label="每 5 分钟" />
@@ -39,7 +39,7 @@
                                     <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
                                 </el-tooltip>
                             </div>
-                            <el-select v-model="form.syncPageSize" style="width: 160px;" :disabled="!isEditing">
+                            <el-select v-model="form.syncPageSize" style="width: 160px;" @change="queueSave">
                                 <el-option :value="50"   label="50 条" />
                                 <el-option :value="100"  label="100 条" />
                                 <el-option :value="200"  label="200 条" />
@@ -66,7 +66,7 @@
                                 value-format="YYYY-MM-DD HH:mm:ss"
                                 style="width: 200px;"
                                 clearable
-                                :disabled="!isEditing"
+                                @change="queueSave"
                             />
                             <span v-if="form.syncStartTime" style="font-size:12px; color:#E6A23C; margin-left:8px;">
                                 仅导入 {{ form.syncStartTime.slice(0,16) }} 之后的告警
@@ -75,13 +75,19 @@
                     </div>
                     <div class="params-sub-footer">
                         <span class="params-hint">修改后，已开启同步的列表将在下次触发时使用新配置</span>
-                        <template v-if="!isEditing">
-                            <el-button size="small" @click="enterEdit">编辑</el-button>
-                        </template>
-                        <template v-else>
-                            <el-button plain size="small" @click="cancelEdit">取消</el-button>
-                            <el-button type="primary" size="small" :loading="isSaving" @click="save">保存</el-button>
-                        </template>
+                        <span class="save-status" style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#909399;">
+                            <template v-if="saveState === 'saving'">
+                                <el-icon class="is-loading"><Loading /></el-icon> 保存中…
+                            </template>
+                            <template v-else-if="saveState === 'error'">
+                                <el-icon color="#F56C6C"><CircleClose /></el-icon>
+                                <span style="color:#F56C6C;">保存失败</span>
+                                <el-button link type="primary" @click="saveSync">重试</el-button>
+                            </template>
+                            <template v-else>
+                                <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="savedAt"> {{ savedAt }}</template>
+                            </template>
+                        </span>
                     </div>
 
                     <el-divider style="margin: 16px 0 12px;" />
@@ -395,7 +401,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { ElNotification } from 'element-plus'
 import { InfoFilled, Download } from '@element-plus/icons-vue'
 
@@ -403,10 +409,9 @@ const API = 'http://localhost:3000/api'
 
 // ── Sync config ───────────────────────────────────────────────────────────────
 const isLoading = ref(false)
-const isSaving  = ref(false)
-const isEditing = ref(false)
+const saveState = ref('idle')   // 'idle' | 'saving' | 'error'
+const savedAt   = ref(null)
 const form = reactive({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null })
-let _orig = {}
 
 // ── RC 环境地址（只读，管理入口在「接口配置」页面）─────────────────────────
 const rcEnvs = ref([])
@@ -426,33 +431,23 @@ const load = async () => {
 }
 onMounted(() => { load(); loadBatchStatus() })
 
-const enterEdit = () => {
-    _orig = { syncIntervalMin: form.syncIntervalMin, syncPageSize: form.syncPageSize, syncStartTime: form.syncStartTime }
-    isEditing.value = true
-}
-const cancelEdit = () => { Object.assign(form, _orig); isEditing.value = false }
-const save = async () => {
-    isSaving.value = true
+// ── Auto-save ───────────────────────────────────────────────────────────────
+let _saveTimer = null
+const queueSave = () => { saveState.value = 'saving'; clearTimeout(_saveTimer); _saveTimer = setTimeout(saveSync, 700) }
+
+const saveSync = async () => {
+    saveState.value = 'saving'
     try {
         await axios.post(`${API}/qa-config`, {
             syncIntervalMin: form.syncIntervalMin,
             syncPageSize:    form.syncPageSize,
             syncStartTime:   form.syncStartTime || null,
         })
-        isEditing.value = false
-        ElNotification.success({ message: '质检配置已保存', position: 'bottom-right', duration: 2500 })
-        // Remind user to restart any running auto-sync switches for the new settings to take effect
-        setTimeout(() => {
-            ElNotification.info({
-                title: '提醒',
-                message: '已开启自动同步的列表将在下次触发时应用新参数；如需立即生效，请在测试页面关闭再重新开启对应列表的同步开关。',
-                position: 'bottom-right',
-                duration: 6000
-            })
-        }, 600)
+        saveState.value = 'idle'
+        savedAt.value   = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     } catch {
-        ElNotification.error({ message: '保存失败，请重试', position: 'bottom-right' })
-    } finally { isSaving.value = false }
+        saveState.value = 'error'
+    }
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────

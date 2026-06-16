@@ -410,11 +410,14 @@ async def run():
         page_tx     = await context.new_page()
         page_bet    = await context.new_page()
         page_profit = await context.new_page()
+        page_reward = await context.new_page()
 
         # ── 先导航，不挂 handler，避免捕获初始加载的旧数据 ──────────────────
         await ensure_logged_in(page_tx,     f"{RC_URL}/allTransactionAlerts", "allTransactionAlerts")
         await ensure_logged_in(page_bet,    f"{RC_URL}/allBetAlerts",         "allBetAlerts")
         await ensure_logged_in(page_profit, f"{RC_URL}/allGameProfitAlerts",  "allGameProfitAlerts")
+        # 优惠告警（日累计领取优惠同比/环比）在独立页面 /rewardAlerts，与投/存告警不同页
+        await ensure_logged_in(page_reward, f"{RC_URL}/rewardAlerts",         "rewardAlerts")
         await asyncio.sleep(2)
 
         # Fetch configured page size from backend before first query
@@ -429,11 +432,14 @@ async def run():
         await set_page_size(page_tx,     "allTransactionAlerts",   initial_page_size)
         await set_page_size(page_bet,    "allBetAlerts", initial_page_size)
         await set_page_size(page_profit, "allGameProfitAlerts", initial_page_size)
+        await set_page_size(page_reward, "rewardAlerts", initial_page_size)
 
         # ── 导航和页面设置完成后再挂 handler，确保只捕获 click_query 后的新数据 ──
         page_tx.on("response",     make_response_handler(None, "allTransactionAlerts",   "allTransactionAlerts", "transaction", RC_URL))
         page_bet.on("response",    make_response_handler(None, "allBetAlerts", "allBetAlerts",          "bet",         RC_URL))
         page_profit.on("response", make_response_handler(None, "allGameProfitAlerts", "allGameProfitAlerts",   "gameProfit",  RC_URL))
+        # /rewardAlerts 默认「告警类型=全部」，一次返回同比+环比两类；后端按 alertType 拆成 typeId 11/12
+        page_reward.on("response", make_response_handler(None, "rewardAlerts", "rewardAlerts",          "reward",      RC_URL))
 
         # 清除日期过滤 → 初始查询（全量数据）
         await clear_date_filters(page_tx,     "allTransactionAlerts")
@@ -444,11 +450,14 @@ async def run():
         await asyncio.sleep(1)
         await clear_date_filters(page_profit, "allGameProfitAlerts")
         await click_query(page_profit, "allGameProfitAlerts")
+        await asyncio.sleep(1)
+        await clear_date_filters(page_reward, "rewardAlerts")
+        await click_query(page_reward, "rewardAlerts")
 
         print()
         print("✅ 服务已启动！等待 QA 系统触发同步指令...")
         print("💡 在 QA 系统点击「直连风控同步」→「同步到当前列表」即可")
-        print("📌 已监听：allTransactionAlerts / allBetAlerts / allGameProfitAlerts")
+        print("📌 已监听：allTransactionAlerts / allBetAlerts / allGameProfitAlerts / rewardAlerts")
         print("=" * 55)
 
         # ── Step 3: Poll for manual trigger from QA frontend ──────────────────
@@ -509,6 +518,10 @@ async def run():
                         await set_page_size(page_profit, "allGameProfitAlerts", page_size)
                         await clear_date_filters(page_profit, "allGameProfitAlerts")
                         await click_query(page_profit, "allGameProfitAlerts")
+                        await asyncio.sleep(1)
+                        await set_page_size(page_reward, "rewardAlerts", page_size)
+                        await clear_date_filters(page_reward, "rewardAlerts")
+                        await click_query(page_reward, "rewardAlerts")
 
                 except Exception as e:
                     consecutive_err += 1
