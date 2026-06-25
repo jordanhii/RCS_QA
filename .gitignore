@@ -38,3 +38,6 @@ npm-debug.log*
 # Local env files
 .env.local
 .env.*.local
+
+# Claude Code session data & agent worktrees
+.claude/
