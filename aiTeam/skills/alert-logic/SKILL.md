@@ -20,8 +20,17 @@ description: Use when modifying alert calculations, alert type metadata, game-pr
 - `frontend/src/logic/gameProfitLogic.js`
 - `frontend/src/logic/netflowCompLogic.js`
 - `frontend/src/logic/netflowHistLogic.js`
+- `frontend/src/logic/promoYoyLogic.js`（优惠同比 typeId 11）
+- `frontend/src/logic/promoMomLogic.js`（优惠环比 typeId 12）
 - `frontend/src/logic/importMapper.js`
-- `frontend/src/logic/alertTypes.js`
+- `frontend/src/logic/alertTypes.js`（含 `REWARD_TYPE_OPTIONS`）
+- 同步侧解析：`backend/routes/syncCache.js` 的 `formatRewardRecord`
+
+## 优惠同比/环比专项（改这两类前必看 domain-model.md 对应章节）
+
+- 同比普通告警**当日只触发一次**；后续金额够也只走连续。`上期=0` 在环比里合法。
+- 同比同步：`avg7`/`avg30` 段是阈值（平均×RC倍数），必须 `rewardRawLast(threshold, mult)` 还原，否则倍数二次放大。
+- 优惠类型多名称、大小写不敏感匹配；列表可关联多个配置（`configIds`），逐行解析。
 
 ## Workflow
 

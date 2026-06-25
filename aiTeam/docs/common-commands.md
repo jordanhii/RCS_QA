@@ -58,7 +58,16 @@ cd frontend
 npm test
 ```
 
+Build check (verify a view/template change compiles — fast, no dev server needed):
+
+```bash
+cd frontend
+npx vite build
+```
+
 Vite usually serves the frontend on port `5173` unless that port is occupied.
+For UI-only/template/style changes, `npx vite build` passing is the quick gate;
+still run `npm run dev` + manual inspect when layout/interaction changes.
 
 ## Python Workers
 

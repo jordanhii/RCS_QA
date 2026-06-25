@@ -5,9 +5,6 @@
                 <h2 class="page-title">告警配置</h2>
                 <p class="page-subtitle">管理各告警类型的检测阈值与参数</p>
             </div>
-            <el-button type="primary" @click="addConfig">
-                <el-icon style="margin-right: 5px;"><Plus /></el-icon> 新增配置
-            </el-button>
         </div>
 
         <div class="type-selector-row">
@@ -26,6 +23,9 @@
                 />
             </el-select>
             <span class="type-selector-hint">{{ currentGroupHint }}</span>
+            <el-button type="primary" class="add-cfg-btn" @click="addConfig">
+                <el-icon style="margin-right: 5px;"><Plus /></el-icon> 新增配置
+            </el-button>
         </div>
 
         <div class="tab-body">
@@ -597,101 +597,127 @@ const deleteConfig = (id) => {
 <style scoped>
 .config-page { display: flex; flex-direction: column; }
 
+/* ── 页头 ─────────────────────────────────────────────────────────────────── */
 .page-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 20px;
+    align-items: center;
+    margin-bottom: 18px;
 }
-.page-title  { margin: 0 0 4px; font-size: 22px; color: var(--qa-heading-color); }
+.page-title  { margin: 0 0 3px; font-size: 20px; font-weight: 700; color: var(--qa-heading-color); }
 .page-subtitle { margin: 0; font-size: 13px; color: var(--qa-subtext-color); }
 
+/* ── 类型选择：一条轻工具条 ──────────────────────────────────────────────── */
 .type-selector-row {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 16px 0 20px;
-    border-bottom: 1px solid #f0f0f0;
+    padding: 12px 16px;
     margin-bottom: 16px;
+    background: #fff;
+    border: 1px solid #ebeef5;
+    border-radius: 10px;
+    box-shadow: var(--qa-shadow-xs);
     flex-wrap: wrap;
 }
 .type-selector-label {
-    font-size: 14px;
-    color: #606266;
+    font-size: 13px;
+    color: #4e5969;
     white-space: nowrap;
-    font-weight: 500;
+    font-weight: 600;
 }
 .type-selector-hint {
     font-size: 12px;
-    color: #909399;
-    background: #f4f4f5;
-    padding: 3px 10px;
-    border-radius: 12px;
+    color: #5a7fb8;
+    background: #f2f6fc;
+    border: 1px solid #e1ebf7;
+    padding: 4px 12px;
+    border-radius: 999px;
     white-space: nowrap;
 }
+.add-cfg-btn { margin-left: auto; }
 
-.tab-body {
-    border: 1px solid #e4e7ed;
-    border-radius: 6px;
-    padding: 20px;
-    background: #fff;
+/* 容器不再是一张大白卡，配置卡各自独立浮在页面底色上 */
+.tab-body { background: transparent; border: none; padding: 0; }
+
+/* ── 配置卡（折叠项 → 独立卡片）────────────────────────────────────────────── */
+.config-collapse {
+    border: none;
+    --el-collapse-border-color: transparent;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
 }
-
-/* ── 折叠列表 ─────────────────────────────────────────────────────────────── */
-.config-collapse { border-top: none; }
+.config-collapse :deep(.el-collapse-item) {
+    background: #fff;
+    border: 1px solid #ebeef5;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--qa-shadow-xs);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.config-collapse :deep(.el-collapse-item:hover) { box-shadow: var(--qa-shadow-sm); }
 .config-collapse :deep(.el-collapse-item__header) {
-    padding: 0 16px;
-    height: 52px;
-    background: #fafafa;
+    padding: 0 18px;
+    height: 56px;
+    background: #fff;
+    border-bottom: 1px solid transparent;
     font-size: 14px;
 }
-.config-collapse :deep(.el-collapse-item__content) {
-    padding: 16px 20px;
+.config-collapse :deep(.el-collapse-item.is-active .el-collapse-item__header) {
+    border-bottom-color: #f0f2f5;
 }
+.config-collapse :deep(.el-collapse-item__content) { padding: 20px 22px 14px; }
 
-.collapse-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
+.collapse-header { display: flex; align-items: center; gap: 8px; width: 100%; padding-right: 16px; }
+.cfg-name {
+    font-size: 14px; font-weight: 700; color: #1d2129;
+    display: inline-flex; align-items: center; gap: 8px;
 }
-.cfg-name { font-size: 15px; font-weight: 600; color: #409EFF; }
-.edit-name-btn { opacity: 0.4; transition: opacity 0.2s; }
+.cfg-name::before {
+    content: ''; width: 7px; height: 7px; border-radius: 50%;
+    background: #409EFF; flex-shrink: 0;
+}
+.edit-name-btn { opacity: 0; transition: opacity 0.2s; }
 .collapse-header:hover .edit-name-btn { opacity: 1; }
 
-/* ── 参数行 ───────────────────────────────────────────────────────────────── */
-.params-list { display: flex; flex-direction: column; }
+/* ── 参数表单 ─────────────────────────────────────────────────────────────── */
+.params-list { display: flex; flex-direction: column; max-width: 720px; }
 .param-row {
     display: flex;
     align-items: center;
-    gap: 20px;
-    padding: 10px 0;
-    border-bottom: 1px solid #f0f2f5;
+    gap: 24px;
+    padding: 13px 0;
+    border-bottom: 1px solid #f5f6f8;
 }
 .param-row:last-child { border-bottom: none; }
 .param-row-label {
-    width: 180px;
+    width: 210px;
     flex-shrink: 0;
     font-size: 13px;
     font-weight: 500;
-    color: #303133;
+    color: #4e5969;
+    line-height: 1.4;
     display: flex;
     align-items: center;
     gap: 6px;
 }
+/* 「开发中」字段整体淡化，让真正可配置的项更突出 */
+.param-row:has(.dev-tag) { opacity: 0.5; }
 .dev-tag {
     --el-tag-bg-color: #f4f4f5;
-    --el-tag-border-color: #d3d4d6;
-    --el-tag-text-color: #909399;
+    --el-tag-border-color: #dcdfe6;
+    --el-tag-text-color: #a8abb2;
     font-size: 10px;
 }
 
 /* ── 游戏盈利配置面板 ──────────────────────────────────────────────────────── */
 .gp-cfg-panel {
     background: #fff;
-    border: 1px solid #e4e7ed;
-    border-radius: 6px;
-    padding: 0 16px;
-    max-width: 480px;
+    border: 1px solid #ebeef5;
+    border-radius: 12px;
+    padding: 4px 18px;
+    max-width: 520px;
+    box-shadow: var(--qa-shadow-xs);
 }
 </style>

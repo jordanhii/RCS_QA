@@ -7,17 +7,33 @@
             </div>
         </div>
 
-        <div class="qa-config-body">
-            <div class="qa-config-left">
+        <el-tabs v-model="activeTab" class="qa-tabs">
+        <!-- ══════════ Tab 1：自动同步 ══════════ -->
+        <el-tab-pane name="sync">
+            <template #label>
+                <span class="qa-tab-label"><el-icon><RefreshRight /></el-icon> 自动同步</span>
+            </template>
 
-                <!-- 风控自动同步（同步参数 + 批量开关合并） -->
-                <div class="section-label">风控自动同步</div>
-                <div class="config-panel">
+            <!-- ── 同步参数 ── -->
+            <div class="section-label">同步参数</div>
+            <div class="config-panel sync-params-card">
+                <span class="save-status save-status--corner">
+                    <template v-if="saveState === 'saving'">
+                        <el-icon class="is-loading"><Loading /></el-icon> 保存中…
+                    </template>
+                    <template v-else-if="saveState === 'error'">
+                        <el-icon color="#F56C6C"><CircleClose /></el-icon>
+                        <span style="color:#F56C6C;">保存失败</span>
+                        <el-button link type="primary" @click="saveSync">重试</el-button>
+                    </template>
+                    <template v-else>
+                        <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="savedAt"> {{ savedAt }}</template>
+                    </template>
+                </span>
 
-                    <!-- 同步参数 -->
-                    <div class="sync-sub-label">同步参数</div>
-                    <div v-if="isLoading" style="padding:16px 0;"><el-skeleton :rows="2" animated /></div>
-                    <div v-else class="params-list">
+                <div v-if="isLoading" style="padding:16px 0;"><el-skeleton :rows="2" animated /></div>
+                <template v-else>
+                    <div class="params-list">
                         <div class="param-row">
                             <div class="param-row-label">
                                 自动同步间隔
@@ -49,116 +65,123 @@
                         </div>
                         <div class="param-row" style="border-bottom:none;">
                             <div class="param-row-label">
-                                同步抓取时间范围
+                                同步抓取时间
                                 <el-tooltip placement="top">
                                     <template #content>
-                                        设置后，自动同步只导入告警时间落在此范围内的数据，范围外的会被过滤掉。<br />
-                                        起/止可任填或留空（留空 = 该端不限制）；全部留空 = 不过滤。
+                                        <div style="max-width:300px;line-height:1.7;">
+                                            只导入告警时间 ≥ 开始时间的数据；<b>结束时间留空 = 一直抓到最新</b>。<br />
+                                            开始也留空 = 不过滤。
+                                        </div>
                                     </template>
                                     <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
                                 </el-tooltip>
                             </div>
-                            <el-date-picker
-                                type="datetimerange"
-                                range-separator="至"
-                                start-placeholder="起始" end-placeholder="结束"
-                                format="YYYY-MM-DD HH:mm"
-                                value-format="YYYY-MM-DD HH:mm:ss"
-                                style="width: 380px;"
-                                clearable
-                                :model-value="(form.syncStartTime || form.syncEndTime) ? [form.syncStartTime, form.syncEndTime] : null"
-                                @update:model-value="v => { form.syncStartTime = v?.[0] || null; form.syncEndTime = v?.[1] || null; queueSave() }"
-                            />
-                            <span v-if="form.syncStartTime || form.syncEndTime" style="font-size:12px; color:#E6A23C; margin-left:8px;">
-                                仅导入 {{ form.syncStartTime ? form.syncStartTime.slice(0,16) : '不限' }} ~ {{ form.syncEndTime ? form.syncEndTime.slice(0,16) : '不限' }} 的告警
-                            </span>
-                        </div>
-                    </div>
-                    <div class="params-sub-footer">
-                        <span class="params-hint">修改后，已开启同步的列表将在下次触发时使用新配置</span>
-                        <span class="save-status" style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#909399;">
-                            <template v-if="saveState === 'saving'">
-                                <el-icon class="is-loading"><Loading /></el-icon> 保存中…
-                            </template>
-                            <template v-else-if="saveState === 'error'">
-                                <el-icon color="#F56C6C"><CircleClose /></el-icon>
-                                <span style="color:#F56C6C;">保存失败</span>
-                                <el-button link type="primary" @click="saveSync">重试</el-button>
-                            </template>
-                            <template v-else>
-                                <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="savedAt"> {{ savedAt }}</template>
-                            </template>
-                        </span>
-                    </div>
-
-                    <el-divider style="margin: 16px 0 12px;" />
-
-                    <!-- 批量开关 -->
-                    <div class="sync-sub-label" style="margin-bottom:6px;">
-                        批量开关
-                        <span style="font-size:12px; font-weight:400; color:#909399; margin-left:6px;">
-                            勾选告警类型后点击「开启选中」，进入对应页面时将自动启动同步
-                        </span>
-                    </div>
-
-                    <div v-if="isBatchLoading" style="padding:12px 0;"><el-skeleton :rows="3" animated /></div>
-                    <template v-else>
-                        <div style="display:flex; align-items:center; gap:10px; padding:8px 0 6px; border-bottom:1px solid #f0f2f5; margin-bottom:8px;">
-                            <el-checkbox
-                                v-model="batchSelectAll"
-                                :indeterminate="batchIndeterminate"
-                                @change="onSelectAll">
-                                全选
-                            </el-checkbox>
-                            <span style="font-size:12px; color:#909399;">
-                                已选 {{ batchSelected.filter(Boolean).length }} / {{ batchTypes.length }} 种告警类型
-                            </span>
-                        </div>
-                        <div class="batch-type-grid">
-                            <div v-for="(t, i) in batchTypes" :key="t.key" class="batch-type-item">
-                                <el-checkbox v-model="batchSelected[i]" @change="onItemChange">
-                                    <span class="batch-type-label">{{ t.label }}</span>
-                                </el-checkbox>
-                                <span class="batch-list-count">
-                                    <el-tag v-if="t.enabledCount > 0" type="success" size="small" effect="plain">
-                                        {{ t.enabledCount }}/{{ t.totalCount }} 已开启
-                                    </el-tag>
-                                    <span v-else style="font-size:11px; color:#c0c4cc;">{{ t.totalCount }} 个列表</span>
-                                </span>
+                            <div class="sync-time-fields">
+                                <el-date-picker
+                                    type="datetime"
+                                    placeholder="开始时间"
+                                    format="YYYY-MM-DD HH:mm"
+                                    value-format="YYYY-MM-DD HH:mm:ss"
+                                    style="width: 185px;"
+                                    clearable
+                                    :model-value="form.syncStartTime"
+                                    @update:model-value="v => { form.syncStartTime = v || null; queueSave() }"
+                                />
+                                <span class="sync-time-sep">至</span>
+                                <el-date-picker
+                                    type="datetime"
+                                    placeholder="结束（留空=最新）"
+                                    format="YYYY-MM-DD HH:mm"
+                                    value-format="YYYY-MM-DD HH:mm:ss"
+                                    style="width: 205px;"
+                                    clearable
+                                    :model-value="form.syncEndTime"
+                                    @update:model-value="v => { form.syncEndTime = v || null; queueSave() }"
+                                />
                             </div>
+                            <span v-if="form.syncStartTime || form.syncEndTime" class="range-note">
+                                仅导入 {{ form.syncStartTime ? form.syncStartTime.slice(0,16) : '不限' }} ~ {{ form.syncEndTime ? form.syncEndTime.slice(0,16) : '最新' }} 的告警
+                            </span>
+                        </div>
+                    </div>
+                    <p class="params-hint params-hint--block">修改后，已开启同步的列表将在下次触发时使用新配置</p>
+                </template>
+            </div>
+
+            <!-- ── 批量开关 ── -->
+            <div class="section-label" style="margin-top:20px;">
+                批量开关
+                <el-tooltip placement="top" effect="dark" :show-after="100">
+                    <template #content>
+                        <div style="max-width:300px;line-height:1.7;">
+                            勾选告警类型后点击「开启选中」，进入对应页面时将自动启动同步。
                         </div>
                     </template>
-
-                    <div class="panel-footer">
-                        <el-button size="small" plain @click="batchDisableSync">关闭全部</el-button>
-                        <el-button size="small" @click="loadBatchStatus">
-                            <el-icon style="margin-right:3px;"><Refresh /></el-icon>刷新状态
-                        </el-button>
-                        <el-button type="primary" size="small" @click="batchEnableSync"
-                            :disabled="!batchSelected.some(Boolean)">
-                            开启选中
-                        </el-button>
-                    </div>
+                    <el-icon class="section-help"><QuestionFilled /></el-icon>
+                </el-tooltip>
+            </div>
+            <div class="config-panel">
+                <div class="card-head">
+                    <el-checkbox
+                        v-model="batchSelectAll"
+                        :indeterminate="batchIndeterminate"
+                        @change="onSelectAll">
+                        全选
+                    </el-checkbox>
+                    <span class="batch-selected-count">
+                        已选 {{ batchSelected.filter(Boolean).length }} / {{ batchTypes.length }} 种
+                    </span>
                 </div>
 
-                <!-- 风控系统地址已移至「接口配置」页面 -->
+                <div v-if="isBatchLoading" style="padding:12px 0;"><el-skeleton :rows="3" animated /></div>
+                <div v-else class="batch-type-grid">
+                    <label v-for="(t, i) in batchTypes" :key="t.key"
+                        class="batch-type-item" :class="{ 'is-selected': batchSelected[i] }">
+                        <el-checkbox v-model="batchSelected[i]" @change="onItemChange">
+                            <span class="batch-type-label">{{ t.label }}</span>
+                        </el-checkbox>
+                        <el-tag v-if="t.enabledCount > 0" type="success" size="small" effect="plain" round>
+                            {{ t.enabledCount }}/{{ t.totalCount }} 已开启
+                        </el-tag>
+                        <span v-else class="batch-list-empty">{{ t.totalCount }} 个列表</span>
+                    </label>
+                </div>
 
-            </div><!-- /qa-config-left -->
+                <div class="panel-footer">
+                    <el-button plain @click="batchDisableSync">关闭全部</el-button>
+                    <el-button @click="loadBatchStatus">
+                        <el-icon style="margin-right:3px;"><Refresh /></el-icon>刷新状态
+                    </el-button>
+                    <el-button type="primary" @click="batchEnableSync"
+                        :disabled="!batchSelected.some(Boolean)">
+                        开启选中
+                    </el-button>
+                </div>
+            </div>
+        </el-tab-pane>
 
-            <!-- ── 右栏：导出工具 ─────────────────────────────────────────── -->
-            <div class="qa-config-right">
+        <!-- ══════════ Tab 2：数据导出 ══════════ -->
+        <el-tab-pane name="export">
+            <template #label>
+                <span class="qa-tab-label"><el-icon><Download /></el-icon> 数据导出</span>
+            </template>
 
-                <!-- 数据导出工具 -->
-                <div class="section-label">数据导出工具</div>
+            <div class="export-stack">
+            <!-- ── 数据导出工具 ── -->
+            <div>
+                <div class="section-label">
+                    数据导出工具
+                    <el-tooltip placement="top" effect="dark" :show-after="100">
+                        <template #content>
+                            <div style="max-width:320px;line-height:1.7;">
+                                直接从 RC 系统抓取告警数据并导出为 Excel。
+                                首次使用会自动用 <b>.env</b> 中配置的账号和 OTP 登录，登录成功后 session 自动保存，后续导出无需重复登录。
+                            </div>
+                        </template>
+                        <el-icon class="section-help"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                </div>
                 <div class="config-panel">
-                    <div class="section-hint">
-                        <el-icon size="14" color="#409EFF"><InfoFilled /></el-icon>
-                        <span>
-                            直接从 RC 系统抓取告警数据并导出为 Excel。
-                            首次使用会自动用 <b>.env</b> 中配置的账号和 OTP 登录，登录成功后 session 自动保存，后续导出无需重复登录。
-                        </span>
-                    </div>
-
                     <div class="params-list">
                         <div class="param-row">
                             <div class="param-row-label">
@@ -245,24 +268,29 @@
                     </div>
 
                     <div class="panel-footer">
-                        <el-button type="primary" size="small" :loading="isExporting" @click="doExport">
+                        <el-button type="primary" :loading="isExporting" @click="doExport">
                             <el-icon style="margin-right:4px;"><Download /></el-icon>
                             导出 Excel
                         </el-button>
                     </div>
                 </div>
+            </div>
 
-                <!-- IGO 平台导出 -->
-                <div class="section-label" style="margin-top: 24px;">IGO 平台导出</div>
+            <!-- ── IGO 平台导出 ── -->
+            <div>
+                <div class="section-label">
+                    IGO 平台导出
+                    <el-tooltip placement="top" effect="dark" :show-after="100">
+                        <template #content>
+                            <div style="max-width:320px;line-height:1.7;">
+                                两阶段并发导出 IGO Specialty Games 数据。Phase 1 浏览器抓取指定日当天数据及 API 请求，
+                                Phase 2 并发复放历史 N 天请求，导出 Excel 含每日数据 + 告警分析。
+                            </div>
+                        </template>
+                        <el-icon class="section-help"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                </div>
                 <div class="config-panel">
-                    <div class="section-hint">
-                        <el-icon size="14" color="#409EFF"><InfoFilled /></el-icon>
-                        <span>
-                            两阶段并发导出 IGO Specialty Games 数据。Phase 1 浏览器抓取指定日当天数据及 API 请求，
-                            Phase 2 并发复放历史 N 天请求，导出 Excel 含每日数据 + 告警分析。
-                        </span>
-                    </div>
-
                     <div class="params-list">
                         <div class="param-row">
                             <div class="param-row-label">
@@ -334,79 +362,91 @@
                             </el-select>
                         </div>
 
-                        <div class="param-row">
-                            <div class="param-row-label">
-                                告警阈值 X (%)
-                                <el-tooltip content="条件1：当前RTP − 日均RTP < X%  →  触发普通告警" placement="top">
-                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
-                                </el-tooltip>
-                            </div>
-                            <el-input-number v-model="igoForm.xThreshold" :precision="1" :step="0.5" controls-position="right" style="width: 130px;" />
-                        </div>
-
-                        <div class="param-row">
-                            <div class="param-row-label">
-                                连续阈值 Y (%)
-                                <el-tooltip content="条件3：上一GGR − 当日GGR ≥ |上一GGR| × Y%  →  触发连续告警" placement="top">
-                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
-                                </el-tooltip>
-                            </div>
-                            <el-input-number v-model="igoForm.yThreshold" :precision="1" :step="0.5" controls-position="right" style="width: 130px;" />
-                        </div>
-
-                        <div class="param-row">
-                            <div class="param-row-label">
-                                上一告警 GGR
-                                <el-tooltip content="上次普通告警时的 GGR（totalBonusAmount 取反），用于条件3计算" placement="top">
-                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
-                                </el-tooltip>
-                            </div>
-                            <el-input-number v-model="igoForm.prevGgr" :precision="3" :step="100000" controls-position="right" style="width: 160px;" />
-                        </div>
-
-                        <div class="param-row">
+                        <div class="param-row" style="border-bottom: none;">
                             <div class="param-row-label">导出内容</div>
                             <el-checkbox v-model="igoForm.exportRaw">原始数据</el-checkbox>
                             <el-checkbox v-model="igoForm.exportAnalysis" style="margin-left:16px;">告警分析</el-checkbox>
                         </div>
-
-                        <div class="param-row">
-                            <div class="param-row-label">
-                                IGO 账号
-                                <el-tooltip content="首次登录需填写；登录成功后会话自动保存，后续可留空" placement="top">
-                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
-                                </el-tooltip>
-                            </div>
-                            <el-input v-model="igoForm.username" placeholder="留空使用默认账号" style="width: 180px;" />
-                        </div>
-
-                        <div class="param-row" style="border-bottom: none;">
-                            <div class="param-row-label">IGO 密码</div>
-                            <el-input v-model="igoForm.password" type="password" show-password placeholder="留空使用默认密码" style="width: 180px;" />
-                        </div>
                     </div>
 
+                    <!-- 高级参数：阈值 / 账号，默认折叠 -->
+                    <el-collapse class="igo-advanced">
+                        <el-collapse-item name="adv">
+                            <template #title>
+                                <span class="igo-adv-title">高级参数（告警阈值 / 账号）</span>
+                            </template>
+                            <div class="params-list">
+                                <div class="param-row">
+                                    <div class="param-row-label">
+                                        告警阈值 X (%)
+                                        <el-tooltip content="条件1：当前RTP − 日均RTP < X%  →  触发普通告警" placement="top">
+                                            <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
+                                        </el-tooltip>
+                                    </div>
+                                    <el-input-number v-model="igoForm.xThreshold" :precision="1" :step="0.5" controls-position="right" style="width: 130px;" />
+                                </div>
+
+                                <div class="param-row">
+                                    <div class="param-row-label">
+                                        连续阈值 Y (%)
+                                        <el-tooltip content="条件3：上一GGR − 当日GGR ≥ |上一GGR| × Y%  →  触发连续告警" placement="top">
+                                            <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
+                                        </el-tooltip>
+                                    </div>
+                                    <el-input-number v-model="igoForm.yThreshold" :precision="1" :step="0.5" controls-position="right" style="width: 130px;" />
+                                </div>
+
+                                <div class="param-row">
+                                    <div class="param-row-label">
+                                        上一告警 GGR
+                                        <el-tooltip content="上次普通告警时的 GGR（totalBonusAmount 取反），用于条件3计算" placement="top">
+                                            <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
+                                        </el-tooltip>
+                                    </div>
+                                    <el-input-number v-model="igoForm.prevGgr" :precision="3" :step="100000" controls-position="right" style="width: 160px;" />
+                                </div>
+
+                                <div class="param-row">
+                                    <div class="param-row-label">
+                                        IGO 账号
+                                        <el-tooltip content="首次登录需填写；登录成功后会话自动保存，后续可留空" placement="top">
+                                            <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
+                                        </el-tooltip>
+                                    </div>
+                                    <el-input v-model="igoForm.username" placeholder="留空使用默认账号" style="width: 180px;" />
+                                </div>
+
+                                <div class="param-row" style="border-bottom: none;">
+                                    <div class="param-row-label">IGO 密码</div>
+                                    <el-input v-model="igoForm.password" type="password" show-password placeholder="留空使用默认密码" style="width: 180px;" />
+                                </div>
+                            </div>
+                        </el-collapse-item>
+                    </el-collapse>
+
                     <div class="panel-footer">
-                        <el-button type="primary" size="small" :loading="isIgoExporting" @click="doIgoExport">
+                        <el-button type="primary" :loading="isIgoExporting" @click="doIgoExport">
                             <el-icon style="margin-right:4px;"><Download /></el-icon>
                             导出 IGO Excel
                         </el-button>
                     </div>
                 </div>
-
-            </div><!-- /qa-config-right -->
-        </div><!-- /qa-config-body -->
+            </div>
+            </div><!-- /export-grid -->
+        </el-tab-pane>
+        </el-tabs>
     </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
-import { Refresh, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { Refresh, RefreshRight, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { ElNotification } from 'element-plus'
-import { InfoFilled, Download } from '@element-plus/icons-vue'
+import { InfoFilled, Download, QuestionFilled } from '@element-plus/icons-vue'
 
 const API = 'http://localhost:3000/api'
+const activeTab = ref('sync')
 
 // ── Sync config ───────────────────────────────────────────────────────────────
 const isLoading = ref(false)
@@ -717,69 +757,83 @@ function batchDisableSync() {
 <style scoped>
 .qa-config-page { display: flex; flex-direction: column; }
 
-.page-header   { margin-bottom: 20px; }
-.page-title    { margin: 0 0 4px; font-size: 22px; color: var(--qa-heading-color); }
+.page-header   { margin-bottom: 18px; }
+.page-title    { margin: 0 0 3px; font-size: 20px; font-weight: 700; color: var(--qa-heading-color); }
 .page-subtitle { margin: 0; font-size: 13px; color: var(--qa-subtext-color); }
 
-/* ── Layout ─────────────────────────────────────────────────────────────────── */
-.qa-config-body {
-    display: flex;
-    flex-direction: row;
-    gap: 24px;
-    align-items: flex-start;
-}
-.qa-config-left  { flex: 1; min-width: 0; }
-.qa-config-right { flex: 1; min-width: 0; }
+/* ── Tabs（顶部分段：自动同步 / 数据导出）────────────────────────────────── */
+.qa-tabs :deep(.el-tabs__header) { margin-bottom: 18px; }
+.qa-tabs :deep(.el-tabs__nav-wrap::after) { height: 1px; background: #ebeef5; }
+.qa-tabs :deep(.el-tabs__item) { font-size: 14px; font-weight: 600; height: 42px; }
+.qa-tab-label { display: inline-flex; align-items: center; gap: 6px; }
 
-/* ── Section label ──────────────────────────────────────────────────────────── */
+/* ── 数据导出：单列堆叠（不再左右分栏），卡片满宽与其它页对齐 ──────────────── */
+.export-stack {
+    display: flex; flex-direction: column; gap: 20px;
+}
+
+/* ── Section label：主色竖条 + 粗体（与告警配置/接口配置统一）─────────────── */
 .section-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--qa-subtext-color, #909399);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 700; color: var(--qa-heading-color);
+    margin-bottom: 12px;
 }
+.section-label::before {
+    content: ''; width: 3px; height: 14px; border-radius: 2px; background: #409EFF; flex-shrink: 0;
+}
+.section-help { font-size: 14px; color: #c0c4cc; cursor: help; transition: color 0.15s ease; }
+.section-help:hover { color: #409EFF; }
 
-/* ── Config panel ───────────────────────────────────────────────────────────── */
+/* ── 卡片头：右上角保存状态 / 左右分布 ───────────────────────────────────── */
+.card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+}
+.card-head-spacer { flex: 1; }
+/* 同步参数卡：已保存放右上角，与第一行参数对齐（不单占一空行）*/
+.sync-params-card { position: relative; }
+.save-status--corner { position: absolute; top: 20px; right: 22px; }
+
+/* ── Config panel：统一卡片（12px 圆角 + 轻边框 + 淡阴影）───────────────── */
 .config-panel {
     background: #fff;
-    border: 1px solid #e4e7ed;
-    border-radius: var(--qa-radius-md);
-    padding: 20px;
+    border: 1px solid #ebeef5;
+    border-radius: 12px;
+    padding: 20px 22px;
+    box-shadow: var(--qa-shadow-xs);
 }
 
-/* ── Hint ───────────────────────────────────────────────────────────────────── */
+/* ── Hint：圆角柔和提示框 ────────────────────────────────────────────────── */
 .section-hint {
-    display: flex; align-items: flex-start; gap: 6px;
-    padding: 8px 12px;
-    background: var(--qa-import-info-bg);
-    border-left: 3px solid #409EFF;
-    font-size: 13px; color: #606266;
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 10px 14px;
+    background: #f2f8ff; border: 1px solid #e1ebf7;
+    border-radius: 10px;
+    font-size: 13px; color: #5e6d82;
     margin-bottom: 16px;
-    border-radius: 0 4px 4px 0;
-    line-height: 1.6;
+    line-height: 1.7;
 }
 
-/* ── Params ─────────────────────────────────────────────────────────────────── */
-.params-list { display: flex; flex-direction: column; }
+/* ── Params（与告警配置一致：卡片满宽，但栏位限宽 720、靠左）─────────────── */
+.params-list { display: flex; flex-direction: column; max-width: 720px; }
 .param-row {
-    display: flex; align-items: center; gap: 20px;
-    padding: 12px 0;
-    border-bottom: 1px solid #f0f2f5;
+    display: flex; align-items: center; gap: 24px;
+    padding: 13px 0;
+    border-bottom: 1px solid #f5f6f8;
 }
 .param-row:last-child { border-bottom: none; }
 .param-row-label {
     width: 120px; flex-shrink: 0;
-    font-size: 13px; font-weight: 500; color: #303133;
-    display: flex; align-items: center; gap: 5px;
+    font-size: 13px; font-weight: 500; color: #4e5969;
+    line-height: 1.4;
+    display: flex; align-items: center; gap: 6px;
 }
 
 /* ── Footer ─────────────────────────────────────────────────────────────────── */
 .panel-footer {
     display: flex; justify-content: flex-end; align-items: center; gap: 8px;
     padding-top: 14px; margin-top: 4px;
-    border-top: 1px solid #f0f2f5;
+    border-top: 1px solid #f5f6f8;
 }
 
 /* ── Log panel ──────────────────────────────────────────────────────────────── */
@@ -848,45 +902,45 @@ function batchDisableSync() {
 .log-ok   .log-msg { color: #67C23A; }
 .log-info .log-msg { color: #409EFF; }
 
-/* ── 合并面板内部子标题 ──────────────────────────────────────────────────── */
-.sync-sub-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: #606266;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    margin-bottom: 10px;
-}
-.params-sub-footer {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 10px 0 0;
-    margin-top: 4px;
-    border-top: 1px solid #f0f2f5;
-}
-.params-hint {
-    flex: 1;
-    font-size: 12px;
-    color: #909399;
-}
+.save-status { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: #909399; }
 
-/* ── 批量自动同步 ─────────────────────────────────────────────────────────── */
+.range-note { font-size: 12px; color: #E6A23C; margin-left: 8px; white-space: nowrap; }
+.sync-time-fields { display: inline-flex; align-items: center; gap: 6px; }
+.sync-time-sep { color: #909399; font-size: 12px; }
+.params-hint { font-size: 12px; color: #909399; }
+.params-hint--block { margin: 12px 0 0; }
+
+/* ── 批量开关：等宽网格，内容靠左成组（不左右撑开）─────────────────────── */
+.batch-selected-count { font-size: 12px; color: #909399; }
 .batch-type-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0;
-    padding: 4px 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+@media (max-width: 680px) {
+    .batch-type-grid { grid-template-columns: 1fr; }
 }
 .batch-type-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 4px;
-    border-bottom: 1px solid #f5f7fa;
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; margin: 0;
+    background: #fafbfc;
+    border: 1px solid #ebeef5;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: var(--qa-transition);
 }
-.batch-type-item:nth-last-child(-n+2) { border-bottom: none; }
+.batch-type-item:hover { border-color: #c0d4f0; background: #f5f8fc; }
+.batch-type-item.is-selected { border-color: #409EFF; background: #ecf5ff; }
 .batch-type-label { font-size: 13px; color: #303133; }
-.batch-list-count { flex-shrink: 0; margin-left: 6px; }
+.batch-list-empty { font-size: 11px; color: #c0c4cc; }
+/* checkbox 去掉默认右边距，让名称紧贴勾选框、状态紧跟名称 */
+.batch-type-item :deep(.el-checkbox) { margin-right: 0; }
+
+/* ── IGO 高级参数折叠 ────────────────────────────────────────────────────── */
+.igo-advanced { border: none; margin-top: 4px; }
+.igo-advanced :deep(.el-collapse-item__header) {
+    height: 40px; font-size: 13px; color: #4e5969; border-bottom: none;
+}
+.igo-advanced :deep(.el-collapse-item__wrap) { border-bottom: none; }
+.igo-adv-title { font-weight: 500; }
 </style>

@@ -1,77 +1,44 @@
 <template>
-    <div style="display: flex; flex-direction: column; gap: 20px;">
-        <el-card shadow="hover" class="main-card" :style="{ '--type-color': typeColor, '--type-color-light': typeColorLight }">
-            <template #header>
-                <div class="page-card-header">
-                    <div class="page-card-header-left">
-                        <div class="page-type-accent" :style="{ background: typeColor }"></div>
-                        <div>
-                            <h2 class="page-card-title">{{ pageTitle }}</h2>
-                            <p class="page-card-subtitle">校验 {{ ALERT_TYPE_MAP[typeId] }} 的告警触发与连续告警逻辑</p>
-                        </div>
-                    </div>
-                    <el-button type="primary" @click="createNewList" size="default">
-                        <el-icon style="margin-right: 5px;"><Plus /></el-icon> 新增列表
-                    </el-button>
-                </div>
-            </template>
-            <div v-if="isPageLoading" style="padding: 30px;">
-                <el-skeleton :rows="8" animated />
+    <div class="test-page">
+        <div class="page-header">
+            <div>
+                <h2 class="page-title">{{ pageTitle }}</h2>
+                <p class="page-subtitle">校验 {{ ALERT_TYPE_MAP[typeId] }} 的告警触发与连续告警逻辑</p>
             </div>
-            <el-empty v-else-if="allLists.length === 0" description="暂无测试列表" />
-            <el-collapse v-else v-model="activeLists" class="custom-collapse">
+            <el-button type="primary" @click="createNewList">
+                <el-icon style="margin-right: 5px;"><Plus /></el-icon> 新增列表
+            </el-button>
+        </div>
+
+        <div v-if="isPageLoading" class="loading-wrap"><el-skeleton :rows="8" animated /></div>
+        <el-empty v-else-if="allLists.length === 0" description="暂无测试列表" />
+        <el-collapse v-else v-model="activeLists" class="list-collapse" :style="{ '--type-color': typeColor }">
                 <el-collapse-item v-for="list in allLists" :key="list._id" :name="list._id">
                     <template #title>
-                        <div class="header-title-wrapper">
+                        <div class="list-head">
+                            <span class="list-dot"></span>
                             <template v-if="!list._isEditingName">
-                                <span class="header-title">{{ list.listName }}</span>
+                                <span class="list-name">{{ list.listName }}</span>
                                 <el-button link type="primary" class="edit-icon" @click.stop="startEditName(list)">
                                     <el-icon><Edit /></el-icon>
                                 </el-button>
                             </template>
                             <template v-else>
-                                <el-input v-model="list._tempName" size="small" style="width: 250px;" @click.stop
+                                <el-input v-model="list._tempName" size="small" style="width: 240px;" @click.stop
                                     @keyup.enter.stop="confirmEditName(list)" placeholder="输入列表名称" />
                                 <el-button type="success" size="small" circle style="margin-left: 8px;"
                                     @click.stop="confirmEditName(list)">
                                     <el-icon><Check /></el-icon>
                                 </el-button>
                             </template>
+                            <el-tag v-if="list.records && list.records.length > 0 && getMatchCount(list).fail > 0"
+                                type="danger" size="small" effect="light" class="list-badge">
+                                {{ getMatchCount(list).fail }} 条异常
+                            </el-tag>
 
-                        </div>
-                    </template>
+                            <div class="list-head-spacer"></div>
 
-                    <!-- 控制栏 -->
-                    <div class="control-panel">
-                        <div class="panel-left">
-                            <span style="font-weight: 600;">关联配置:</span>
-                            <el-select v-model="list.configId" placeholder="选择配置" style="width: 220px"
-                                @change="saveList(list, false)">
-                                <el-option v-for="c in availableConfigs" :key="c._id" :label="c.name" :value="c._id" />
-                            </el-select>
-                            <el-popover v-if="getCfg(list)" placement="bottom-start" trigger="hover" :width="220">
-                                <template #reference>
-                                    <el-icon size="14" color="#409EFF" style="cursor:help;margin-left:4px;vertical-align:middle;"><InfoFilled /></el-icon>
-                                </template>
-                                <div style="font-size:13px;line-height:2;">
-                                    <template v-if="[3,4].includes(typeId)">
-                                        <div><b>持续时间：</b>{{ getCfg(list).durationMin }} 分钟</div>
-                                        <div><b>倍数上限：</b>{{ getCfg(list).multiUpper }}</div>
-                                        <div><b>倍数下限：</b>{{ getCfg(list).multiLower }}</div>
-                                    </template>
-                                    <template v-if="[5].includes(typeId)">
-                                        <div><b>比例阈值：</b>{{ getCfg(list).ratioLimit }}</div>
-                                    </template>
-                                    <template v-if="[6,7].includes(typeId)">
-                                        <div><b>比例阈值：</b>{{ getCfg(list).ratioLimit }}</div>
-                                        <div><b>连续告警倍数：</b>{{ getCfg(list).ratioMulti }}</div>
-                                        <div><b>告警窗口：</b>{{ getCfg(list).alertWindow }} 分钟</div>
-                                    </template>
-                                </div>
-                            </el-popover>
-                        </div>
-                        <div class="panel-right">
-                            <span class="save-status" style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:#909399; margin-right:8px;">
+                            <span class="save-status" @click.stop>
                                 <template v-if="list._saveState === 'saving'">
                                     <el-icon class="is-loading"><Loading /></el-icon> 保存中…
                                 </template>
@@ -84,16 +51,50 @@
                                     <el-icon color="#67C23A"><CircleCheck /></el-icon> 已保存<template v-if="list._savedAt"> {{ list._savedAt }}</template>
                                 </template>
                             </span>
-                            <el-upload action="#" :auto-upload="false" :show-file-list="false"
-                                :on-change="(file) => handleImportPreview(file, list)">
-                                <el-button type="warning" plain>
-                                    <el-icon><Upload /></el-icon> 导入 Excel
-                                </el-button>
-                            </el-upload>
-                            <el-button type="info" @click="addRow(list)">手工新增</el-button>
-                            <el-divider direction="vertical" style="height:20px; margin:0 6px;" />
-                            <el-button type="danger" plain @click="removeList(list._id)">删除</el-button>
                         </div>
+                    </template>
+
+                    <div class="list-body">
+                    <!-- 关联配置 + 列表操作 -->
+                    <div class="setting-row">
+                        <span class="setting-label">关联配置</span>
+                        <el-select v-model="list.configId" placeholder="选择配置" style="width: 220px" size="small"
+                            @change="saveList(list, false)">
+                            <el-option v-for="c in availableConfigs" :key="c._id" :label="c.name" :value="c._id" />
+                        </el-select>
+                        <el-popover v-if="getCfg(list) && [3,4,5,6,7].includes(typeId)" placement="bottom-start" trigger="hover" :width="220">
+                            <template #reference>
+                                <el-icon size="14" color="#409EFF" style="cursor:help;margin-left:2px;vertical-align:middle;"><InfoFilled /></el-icon>
+                            </template>
+                            <div style="font-size:13px;line-height:2;">
+                                <template v-if="[3,4].includes(typeId)">
+                                    <div><b>持续时间：</b>{{ getCfg(list).durationMin }} 分钟</div>
+                                    <div><b>倍数上限：</b>{{ getCfg(list).multiUpper }}</div>
+                                    <div><b>倍数下限：</b>{{ getCfg(list).multiLower }}</div>
+                                </template>
+                                <template v-if="[5].includes(typeId)">
+                                    <div><b>比例阈值：</b>{{ getCfg(list).ratioLimit }}</div>
+                                </template>
+                                <template v-if="[6,7].includes(typeId)">
+                                    <div><b>比例阈值：</b>{{ getCfg(list).ratioLimit }}</div>
+                                    <div><b>连续告警倍数：</b>{{ getCfg(list).ratioMulti }}</div>
+                                    <div><b>告警窗口：</b>{{ getCfg(list).alertWindow }} 分钟</div>
+                                </template>
+                            </div>
+                        </el-popover>
+
+                        <div class="setting-row-spacer"></div>
+
+                        <el-upload action="#" :auto-upload="false" :show-file-list="false"
+                            :on-change="(file) => handleImportPreview(file, list)">
+                            <el-button type="primary" plain size="small">
+                                <el-icon style="margin-right:3px;"><Upload /></el-icon> 导入 Excel
+                            </el-button>
+                        </el-upload>
+                        <el-button plain size="small" @click="addRow(list)">
+                            <el-icon style="margin-right:3px;"><Plus /></el-icon> 手工新增
+                        </el-button>
+                        <el-button type="danger" plain size="small" @click="removeList(list._id)">删除</el-button>
                     </div>
 
                     <!-- 同步控制栏 -->
@@ -119,25 +120,35 @@
                                     每 {{ globalQAConfig.syncIntervalMin }} 分钟 · 抓 {{ globalQAConfig.syncPageSize }} 条
                                 </span>
                             </el-tooltip>
-                            <!-- 同步起始时间 -->
+                            <!-- 同步抓取时间：开始 + 结束（结束留空 = 一直抓到最新）-->
                             <el-tooltip placement="bottom"
-                                :content="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime) ? '已在质检配置中设定，子页面不支持修改' : '只同步告警时间落在此范围内的数据，留空 = 不限制'">
-                                <span style="display:inline-block;">
-                                <el-date-picker
-                                    type="datetimerange"
-                                    range-separator="至"
-                                    start-placeholder="抓取起始" end-placeholder="抓取结束"
-                                    format="MM-DD HH:mm"
-                                    value-format="YYYY-MM-DD HH:mm:ss"
-                                    style="width:330px;"
-                                    size="small"
-                                    clearable
-                                    :disabled="!!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)"
-                                    :model-value="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)
-                                        ? [globalQAConfig.syncStartTime, globalQAConfig.syncEndTime]
-                                        : ((list.syncStartTime && list.syncEndTime) ? [list.syncStartTime, list.syncEndTime] : null)"
-                                    @update:model-value="v => { if (!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)) { list.syncStartTime = v?.[0] || null; list.syncEndTime = v?.[1] || null; saveList(list, false) } }"
-                                />
+                                :content="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime) ? '已在质检配置中设定，子页面不支持修改' : '只同步告警时间 ≥ 开始时间的数据；结束时间留空 = 一直抓到最新'">
+                                <span class="sync-time-fields">
+                                    <el-date-picker
+                                        type="datetime"
+                                        placeholder="开始时间"
+                                        format="MM-DD HH:mm"
+                                        value-format="YYYY-MM-DD HH:mm:ss"
+                                        style="width:150px;"
+                                        size="small"
+                                        clearable
+                                        :disabled="!!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)"
+                                        :model-value="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime) ? globalQAConfig.syncStartTime : list.syncStartTime"
+                                        @update:model-value="v => { if (!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)) { list.syncStartTime = v || null; saveList(list, false) } }"
+                                    />
+                                    <span class="sync-time-sep">至</span>
+                                    <el-date-picker
+                                        type="datetime"
+                                        placeholder="结束（留空=最新）"
+                                        format="MM-DD HH:mm"
+                                        value-format="YYYY-MM-DD HH:mm:ss"
+                                        style="width:170px;"
+                                        size="small"
+                                        clearable
+                                        :disabled="!!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)"
+                                        :model-value="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime) ? globalQAConfig.syncEndTime : list.syncEndTime"
+                                        @update:model-value="v => { if (!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)) { list.syncEndTime = v || null; saveList(list, false) } }"
+                                    />
                                 </span>
                             </el-tooltip>
                             <el-divider direction="vertical" />
@@ -239,8 +250,10 @@
                         <span class="stat-item" :class="getMatchCount(list).fail > 0 ? 'stat-fail' : 'stat-ok'">
                             <el-icon><CircleClose /></el-icon>&nbsp;逻辑异常：<b>{{ getMatchCount(list).fail }}</b>
                         </span>
-                        <el-tag v-if="getMatchCount(list).fail > 0" type="danger" effect="dark" size="small" style="margin-left: 10px;">
-                            ⚠ {{ getMatchCount(list).fail }} 条异常，请检查高亮行
+                        <el-tag v-if="getMatchCount(list).fail > 0" type="danger" effect="dark" size="small"
+                            style="margin-left: 10px; cursor:pointer;"
+                            @click="list._onlyMismatch = true; list._currentPage = 1">
+                            ⚠ {{ getMatchCount(list).fail }} 条异常，点此只看异常
                         </el-tag>
                         <el-tag v-else-if="list.records.length > 0 && getMatchCount(list).pass > 0" type="success" effect="dark" size="small" style="margin-left: 10px;">
                             ✓ 逻辑全部一致
@@ -264,6 +277,14 @@
                                     </el-dropdown-menu>
                                 </template>
                             </el-dropdown>
+                            <el-button size="small"
+                                :type="list._onlyMismatch ? 'danger' : ''"
+                                :plain="!list._onlyMismatch"
+                                :disabled="getMatchCount(list).fail === 0 && !list._onlyMismatch"
+                                @click="list._onlyMismatch = !list._onlyMismatch; list._currentPage = 1">
+                                <el-icon style="margin-right:3px;"><Warning /></el-icon>
+                                {{ list._onlyMismatch ? '显示全部' : '只看异常' }}<template v-if="!list._onlyMismatch && getMatchCount(list).fail > 0"> ({{ getMatchCount(list).fail }})</template>
+                            </el-button>
                             <template v-if="list._selectedRows && list._selectedRows.length > 0">
                                 <el-divider direction="vertical" />
                                 <span class="bulk-count">已选 <b>{{ list._selectedRows.length }}</b> 条</span>
@@ -297,12 +318,14 @@
 
                     <!-- 数据表格 -->
                     <el-table
+                        :ref="(el) => setTableRef(list, el)"
                         :data="getPagedRecords(list)"
                         border
                         style="width: 100%"
                         size="small"
                         :row-key="(row) => row.alertId || list.records.indexOf(row)"
                         :row-class-name="({ row }) => getRowClass(row, list.records.indexOf(row), list)"
+                        @select="(sel, row) => onRowSelect(list, sel, row)"
                         @selection-change="(rows) => list._selectedRows = rows">
 
                         <el-table-column type="selection" width="40" fixed="left" reserve-selection />
@@ -323,14 +346,14 @@
 
                         <el-table-column :label="val1Label" min-width="120">
                             <template #default="scope">
-                                <el-input-number v-model="scope.row.val1" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
+                                <el-input-number v-model="scope.row.val1" :controls="false" :formatter="amtFormat" :parser="amtParse" size="small" style="width:100%" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
                         <!-- val2 — 标准类型 (typeId 1-7) -->
                         <el-table-column v-if="typeId !== 9" :label="val2Label" min-width="120">
                             <template #default="scope">
-                                <el-input-number v-model="scope.row.val2" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
+                                <el-input-number v-model="scope.row.val2" :controls="false" :formatter="amtFormat" :parser="amtParse" size="small" style="width:100%" placeholder="未抓到" />
                             </template>
                         </el-table-column>
 
@@ -345,27 +368,27 @@
                         <template v-if="typeId === 9">
                             <el-table-column label="当前存款额" min-width="110">
                                 <template #default="scope">
-                                    <el-input-number v-model="scope.row.depositAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
+                                    <el-input-number v-model="scope.row.depositAmount" :controls="false" :formatter="amtFormat" :parser="amtParse" size="small" style="width:100%" placeholder="未抓到" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="当前提款额" min-width="110">
                                 <template #default="scope">
-                                    <el-input-number v-model="scope.row.withdrawalAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
+                                    <el-input-number v-model="scope.row.withdrawalAmount" :controls="false" :formatter="amtFormat" :parser="amtParse" size="small" style="width:100%" placeholder="未抓到" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="Last 存提差" min-width="110">
                                 <template #default="scope">
-                                    <el-input-number v-model="scope.row.lastNetflowAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
+                                    <el-input-number v-model="scope.row.lastNetflowAmount" :controls="false" :formatter="amtFormat" :parser="amtParse" size="small" style="width:100%" placeholder="未抓到" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="Last 存款额" min-width="110">
                                 <template #default="scope">
-                                    <el-input-number v-model="scope.row.lastDepositAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
+                                    <el-input-number v-model="scope.row.lastDepositAmount" :controls="false" :formatter="amtFormat" :parser="amtParse" size="small" style="width:100%" placeholder="未抓到" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="Last 提款额" min-width="110">
                                 <template #default="scope">
-                                    <el-input-number v-model="scope.row.lastWithdrawalAmount" :controls="false" size="small" style="width:100%" placeholder="未抓到" />
+                                    <el-input-number v-model="scope.row.lastWithdrawalAmount" :controls="false" :formatter="amtFormat" :parser="amtParse" size="small" style="width:100%" placeholder="未抓到" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="下降金额" width="100" align="right">
@@ -462,9 +485,10 @@
                                 </el-tooltip>
                             </template>
                             <template #default="scope">
-                                <b :style="{ color: getContResultColor(getContResult(list.records.indexOf(scope.row), list)) }">
+                                <span v-if="getContResult(list.records.indexOf(scope.row), list) === '-'" style="color:var(--qa-neutral);">—</span>
+                                <el-tag v-else :type="contTagType(getContResult(list.records.indexOf(scope.row), list))" size="small">
                                     {{ getContResult(list.records.indexOf(scope.row), list) }}
-                                </b>
+                                </el-tag>
                             </template>
                         </el-table-column>
 
@@ -492,22 +516,6 @@
                                 <el-tag v-else type="info" size="small">待判断</el-tag>
                             </template>
                         </el-table-column>
-
-                        <!-- 操作 -->
-                        <el-table-column label="操作" width="110" align="center" fixed="right">
-                            <template #default="scope">
-                                <el-button
-                                    :type="scope.row.ignored ? 'info' : 'warning'"
-                                    link
-                                    @click="scope.row.ignored = !scope.row.ignored; saveList(list, false)">
-                                    {{ scope.row.ignored ? '恢复' : '忽略' }}
-                                </el-button>
-                                <el-button type="danger" link
-                                    @click="removeRecord(list, list.records.indexOf(scope.row))">
-                                    删除
-                                </el-button>
-                            </template>
-                        </el-table-column>
                     </el-table>
 
                     <!-- 分页（有数据时始终显示） -->
@@ -515,10 +523,11 @@
                         <el-pagination
                             v-model:current-page="list._currentPage"
                             v-model:page-size="list._pageSize"
-                            :page-sizes="[30, 50, 100, 200, 500, 1000]"
+                            :page-sizes="[30, 50, 100, 200]"
                             :total="getFilteredRecords(list).length"
                             layout="total, sizes, prev, pager, next, jumper"
                             background
+                            small
                             @size-change="list._currentPage = 1"
                         />
                         <!-- 手动输入每页条数 -->
@@ -533,9 +542,9 @@
                             <el-button size="small" @click="applyCustomPageSize(list)">确定</el-button>
                         </div>
                     </div>
+                    </div><!-- /list-body -->
                 </el-collapse-item>
             </el-collapse>
-        </el-card>
 
         <!-- Excel 导入时间范围弹窗 -->
         <el-dialog v-model="importDialogVisible" title="📥 选择导入时间范围" width="600px" :close-on-click-modal="false">
@@ -597,9 +606,10 @@ import { ElNotification, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
 import { CircleCheck, CircleClose, Loading, Plus, Edit, Check, Upload, InfoFilled, Warning, DocumentAdd, ArrowDown } from '@element-plus/icons-vue'
 
-import { ALERT_TYPE_MAP, PAGE_TITLES, TYPE_DISPLAY_NAMES, CONT_TYPE_OPTIONS, getVal1Label, getVal2Label, getRatioLabel } from '../logic/alertTypes.js'
+import { ALERT_TYPE_MAP, PAGE_TITLES, TYPE_DISPLAY_NAMES, CONT_TYPE_OPTIONS, TEST_SLUG_TO_TYPEID, getVal1Label, getVal2Label, getRatioLabel } from '../logic/alertTypes.js'
 import { calcNormalResult, calcContResult, calcLogicMatch, getContResultColor, calcRatio, calcRealDeposit } from '../logic/alertLogic.js'
 import { fmtDate, filterByAlertType, getTimeRange, mapExcelRows } from '../logic/importMapper.js'
+import { amtFormat, amtParse } from '../logic/format.js'
 import {
     calcDecline as nfCalcDecline,
     calcNormalResult as nfCalcNormalResult,
@@ -608,7 +618,10 @@ import {
     getY as nfGetY,
 } from '../logic/netflowCompLogic.js'
 
-const route = useRoute(), typeId = Number(route.params.id), API = 'http://localhost:3000/api'
+const route = useRoute()
+// 支持可读 slug（/test/netflow-comp）与旧数字路由（/test/9）两种
+const typeId = TEST_SLUG_TO_TYPEID[route.params.id] ?? Number(route.params.id)
+const API = 'http://localhost:3000/api'
 
 const pageTitle = computed(() => PAGE_TITLES[typeId])
 const val1Label = computed(() => getVal1Label(typeId))
@@ -855,6 +868,8 @@ const manualSync = async (list) => {
 }
 
 onBeforeUnmount(() => {
+    window.removeEventListener('keydown', _onShiftKey)
+    window.removeEventListener('keyup', _onShiftKey)
     syncTimers.forEach(id => clearInterval(id))
     syncTimers.clear()
     if (_tickTimer) clearInterval(_tickTimer)
@@ -886,6 +901,8 @@ const importFilteredCount = computed(() => {
 })
 
 onMounted(async () => {
+    window.addEventListener('keydown', _onShiftKey)
+    window.addEventListener('keyup', _onShiftKey)
     // 每秒 tick 一次，使冷却倒计时在按钮上实时更新
     _tickTimer = setInterval(() => { _tick.value++ }, 1000)
     isPageLoading.value = true
@@ -909,6 +926,7 @@ onMounted(async () => {
             _lastSyncAt: null,
             _isSyncingNow: false,
             _dateRange: null,
+            _onlyMismatch: false,
         }))
         allLists.value.forEach(attachAutoSave)
         // Restore collapse state from localStorage; default to first list open
@@ -941,15 +959,25 @@ onMounted(async () => {
 watch(activeLists, (ids) => saveCollapseState(ids), { deep: true })
 
 /** Returns records filtered by the selected time range */
+/** 某行是否「逻辑异常」（与表格「逻辑一致」列一致）：已判断(devResult) 且 未忽略 且 不一致 */
+const isMismatch = (list, row) => {
+    if (row.ignored || !row.devResult) return false
+    return !checkLogicMatch(row, list.records.indexOf(row), list)
+}
+
 const getFilteredRecords = (list) => {
-    if (!list._dateRange || !list._dateRange[0]) return list.records
-    const startMs = new Date(list._dateRange[0]).getTime()
-    const endMs   = new Date(list._dateRange[1]).getTime()
-    return list.records.filter(r => {
-        if (!r.alertTime) return false
-        const t = new Date(r.alertTime).getTime()
-        return t >= startMs && t <= endMs
-    })
+    let recs = list.records
+    if (list._dateRange && list._dateRange[0]) {
+        const startMs = new Date(list._dateRange[0]).getTime()
+        const endMs   = new Date(list._dateRange[1]).getTime()
+        recs = recs.filter(r => {
+            if (!r.alertTime) return false
+            const t = new Date(r.alertTime).getTime()
+            return t >= startMs && t <= endMs
+        })
+    }
+    if (list._onlyMismatch) recs = recs.filter(r => isMismatch(list, r))
+    return recs
 }
 
 /** Returns the slice of records for the current page (after date filter) */
@@ -957,6 +985,23 @@ const getPagedRecords = (list) => {
     const filtered = getFilteredRecords(list)
     const start = (list._currentPage - 1) * list._pageSize
     return filtered.slice(start, start + list._pageSize)
+}
+
+// ── Shift 框选：勾一行后按住 Shift 勾另一行 → 中间整段一次性同步勾选/取消 ──────
+const _shiftHeld = ref(false)
+const _onShiftKey = (e) => { _shiftHeld.value = e.shiftKey }
+const _tableRefs = {}
+const setTableRef = (list, el) => { if (el) _tableRefs[list._id] = el; else delete _tableRefs[list._id] }
+const onRowSelect = (list, selection, row) => {
+    const paged = getPagedRecords(list)
+    const idx = paged.indexOf(row)
+    const nowSelected = selection.includes(row)
+    if (_shiftHeld.value && list._lastSelIdx != null && list._lastSelIdx !== idx && idx >= 0) {
+        const [a, b] = list._lastSelIdx < idx ? [list._lastSelIdx, idx] : [idx, list._lastSelIdx]
+        const tbl = _tableRefs[list._id]
+        for (let i = a; i <= b; i++) tbl?.toggleRowSelection(paged[i], nowSelected)
+    }
+    list._lastSelIdx = idx
 }
 
 /** Removes a record by absolute index and clamps the current page */
@@ -972,8 +1017,11 @@ const removeRecord = (list, absIdx) => {
     }).catch(() => {})
 }
 
-/** Returns pass/fail counts across all records in a list */
-const getMatchCount = (list) => {
+/** 连续告警结果 → el-tag 类型（与其它结果列统一胶囊样式）：TRUE=success, FALSE=danger, 其它(-)=info */
+const contTagType = (v) => v === 'TRUE' ? 'success' : v === 'FALSE' ? 'danger' : 'info'
+
+/** Returns pass/fail counts across all records in a list（原始 O(n) 计算）*/
+const _computeMatchCount = (list) => {
     if (typeId === 9) return nfGetMatchCount(list.records, getCfg(list))
     let pass = 0, fail = 0
     list.records.forEach((row, index) => {
@@ -982,6 +1030,13 @@ const getMatchCount = (list) => {
     })
     return { pass, fail }
 }
+// 性能：模板里 getMatchCount 被调多次，用 computed 缓存，仅在记录/配置变化时整体重算一次
+const _matchCounts = computed(() => {
+    const m = {}
+    for (const l of allLists.value) m[l._id] = _computeMatchCount(l)
+    return m
+})
+const getMatchCount = (list) => _matchCounts.value[list._id] || { pass: 0, fail: 0 }
 
 /** Returns a CSS class name for a table row based on logic match */
 const getRowClass = (row, absIdx, list) => {
@@ -1240,51 +1295,62 @@ const confirmImport = () => {
 </script>
 
 <style scoped>
-.main-card { border-radius: 8px; }
-
-.header-title-wrapper { display: flex; align-items: center; width: 100%; gap: 6px; padding-right: 12px; }
-.header-title { font-weight: 700; color: var(--qa-heading-color); font-size: 14px; }
-
-/* ── 列表状态 badge ──────────────────────────────────────────────────────── */
-.list-status-badge {
-    display: inline-flex;
-    align-items: center;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 10px;
-    border-radius: 20px;
-    white-space: nowrap;
-    flex-shrink: 0;
+/* ── 页面骨架（与配置页统一）────────────────────────────────────────────── */
+.test-page { display: flex; flex-direction: column; }
+.page-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 18px;
 }
-.badge-fail  { background: #fff1f0; color: #ff4d4f; border: 1px solid #ffa39e; }
-.badge-empty { background: #f5f5f5; color: #bfbfbf; border: 1px solid #e8eaed; font-weight: 400; }
+.page-title    { margin: 0 0 3px; font-size: 20px; font-weight: 700; color: var(--qa-heading-color); }
+.page-subtitle { margin: 0; font-size: 13px; color: var(--qa-subtext-color); }
+.loading-wrap  { background: #fff; border: 1px solid #ebeef5; border-radius: 12px; padding: 24px; box-shadow: var(--qa-shadow-xs); }
 
-.control-panel {
-    background: var(--qa-control-panel-bg);
-    padding: 15px;
-    border-radius: 6px;
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 12px;
+/* ── 列表卡片头部 ───────────────────────────────────────────────────────── */
+.list-head { display: flex; align-items: center; width: 100%; gap: 8px; padding-right: 16px; }
+.list-head .save-status { margin-right: 4px; }
+.list-dot  { width: 8px; height: 8px; border-radius: 50%; background: var(--type-color, #409EFF); flex-shrink: 0; }
+.list-name { font-weight: 700; color: var(--qa-heading-color); font-size: 14px; }
+.edit-icon { padding: 2px; }
+.list-badge { flex-shrink: 0; }
+.list-head-spacer { flex: 1; }
+.list-head-actions { display: flex; align-items: center; gap: 8px; }
+.save-status { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: #909399; }
+
+/* ── 列表卡片内容 ───────────────────────────────────────────────────────── */
+.list-body { padding: 4px 2px 2px; }
+.setting-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 4px 0 14px;
 }
-.panel-right { display: flex; gap: 8px; }
+.setting-label { font-size: 13px; font-weight: 500; color: #4e5969; }
+.setting-row-spacer { flex: 1; }
+/* 让 导入/手工新增/删除 间距、高度一致：去掉 Element 相邻按钮的额外 margin，间距只靠 gap */
+.setting-row :deep(.el-button + .el-button) { margin-left: 0; }
+/* el-upload 盒子默认基线偏高，钉成 small 按钮高度(24px)并居中，与旁边按钮对齐 */
+.setting-row :deep(.el-upload),
+.setting-row :deep(.el-upload--text) {
+    display: inline-flex; align-items: center; height: 24px; line-height: 1;
+}
+.sync-time-fields { display: inline-flex; align-items: center; gap: 6px; }
+.sync-time-sep { color: #909399; font-size: 12px; }
 
 .stats-bar {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 14px;
+    padding: 9px 14px;
     margin-bottom: 12px;
     background: var(--qa-stats-pass-bg);
     border: 1px solid var(--qa-stats-pass-border);
-    border-radius: 6px;
+    border-radius: 10px;
     font-size: 13px;
 }
 .stats-bar.has-fail {
     background: var(--qa-stats-fail-bg);
     border-color: var(--qa-stats-fail-border);
 }
-.stat-item { display: flex; align-items: center; gap: 3px; }
+.stat-item { display: inline-flex; align-items: center; gap: 4px; line-height: 1; }
+.stat-item :deep(.el-icon) { font-size: 14px; }
 .stat-pass { color: var(--qa-pass); }
 .stat-fail { color: var(--qa-fail); font-weight: bold; }
 .stat-ok   { color: var(--qa-neutral); }
@@ -1301,9 +1367,9 @@ const confirmImport = () => {
 
 .action-bar {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 12px; padding: 6px 10px; margin-bottom: 6px;
-    background: #f7f8fa; border: 1px solid #eaecef;
-    border-radius: 6px; font-size: 13px; flex-wrap: wrap;
+    gap: 12px; padding: 8px 12px; margin-bottom: 10px;
+    background: #fafbfc; border: 1px solid #ebeef5;
+    border-radius: 10px; font-size: 13px; flex-wrap: wrap;
 }
 .action-bar-left  { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .action-bar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
@@ -1322,6 +1388,7 @@ const confirmImport = () => {
 }
 .bulk-label { color: #909399; font-size: 12px; }
 .bulk-count { color: #606266; }
+.shift-hint { font-size: 12px; color: #c0c4cc; }
 
 .pagination-bar {
     display: flex;
@@ -1369,16 +1436,17 @@ const confirmImport = () => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 14px;
-    margin-bottom: 12px;
-    background: #f8f9fa;
-    border: 1px solid #e4e7ed;
-    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    background: #fafbfc;
+    border: 1px solid #ebeef5;
+    border-radius: 10px;
     font-size: 13px;
     gap: 12px;
+    flex-wrap: wrap;
 }
 .sync-bar-active {
-    background: #f0f9eb;
+    background: #f6ffed;
     border-color: var(--qa-stats-pass-border);
 }
 .sync-bar-left  { display: flex; align-items: center; gap: 10px; }
@@ -1454,60 +1522,27 @@ const confirmImport = () => {
     white-space: nowrap;
 }
 
-/* ── 页面卡片顶部 header ───────────────────────────────────────────────────── */
-.page-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+/* ── 列表卡片（collapse 当作独立白卡，与配置页一致）─────────────────────── */
+.list-collapse { border: none; }
+:deep(.list-collapse .el-collapse-item) {
+    border: 1px solid #ebeef5;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    box-shadow: var(--qa-shadow-xs);
+    background: #fff;
 }
-.page-card-header-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-.page-type-accent {
-    width: 4px;
-    height: 36px;
-    border-radius: 3px;
-    flex-shrink: 0;
-}
-.page-card-title {
-    margin: 0;
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--qa-heading-color);
-    line-height: 1.2;
-}
-.page-card-subtitle {
-    margin: 2px 0 0;
-    font-size: 13px;
-    color: var(--qa-subtext-color);
-}
-
-/* ── Collapse 整体优化 ───────────────────────────────────────────────────── */
-:deep(.custom-collapse .el-collapse-item__header) {
-    background: #fafbfc;
-    border-radius: 6px;
-    padding: 0 16px;
+:deep(.list-collapse .el-collapse-item__header) {
+    height: 54px;
+    padding: 0 20px;
     font-size: 14px;
+    border-bottom: 1px solid transparent;
     transition: background 0.15s;
 }
-:deep(.custom-collapse .el-collapse-item__header:hover) {
-    background: #f0f4ff;
+:deep(.list-collapse .el-collapse-item__header:hover) { background: #fafbfc; }
+:deep(.list-collapse .el-collapse-item__header.is-active) {
+    border-bottom-color: #f0f2f5;
 }
-:deep(.custom-collapse .el-collapse-item__header.is-active) {
-    border-bottom: 1px solid #e8eaed;
-    border-radius: 6px 6px 0 0;
-    background: #fff;
-    border-left: 3px solid var(--type-color, #1677ff);
-}
-:deep(.custom-collapse .el-collapse-item) {
-    border: 1px solid #e8eaed;
-    border-radius: 8px;
-    margin-bottom: 10px;
-    overflow: hidden;
-}
-:deep(.custom-collapse .el-collapse-item__wrap) {
-    border-top: none;
-}
+:deep(.list-collapse .el-collapse-item__wrap) { border-top: none; }
+:deep(.list-collapse .el-collapse-item__content) { padding: 16px 20px 20px; }
 </style>
