@@ -112,6 +112,24 @@
                                     每 {{ globalQAConfig.syncIntervalMin }} 分钟 · 抓 {{ globalQAConfig.syncPageSize }} 条
                                 </span>
                             </el-tooltip>
+                            <el-tooltip placement="top"
+                                :content="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime) ? '已在质检配置中设定，子页面不支持修改' : '只同步告警时间落在此范围内的数据，留空 = 不限制'">
+                                <span style="display:inline-block;">
+                                <el-date-picker
+                                    type="datetimerange"
+                                    range-separator="至"
+                                    start-placeholder="抓取起始" end-placeholder="抓取结束"
+                                    format="MM-DD HH:mm"
+                                    value-format="YYYY-MM-DD HH:mm:ss"
+                                    style="width:330px;" size="small" clearable
+                                    :disabled="!!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)"
+                                    :model-value="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)
+                                        ? [globalQAConfig.syncStartTime, globalQAConfig.syncEndTime]
+                                        : ((list.syncStartTime && list.syncEndTime) ? [list.syncStartTime, list.syncEndTime] : null)"
+                                    @update:model-value="v => { if (!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)) { list.syncStartTime = v?.[0] || null; list.syncEndTime = v?.[1] || null; saveList(list, false) } }"
+                                />
+                                </span>
+                            </el-tooltip>
                             <el-divider direction="vertical" />
                             <el-tooltip
                                 :content="cooldownSec(list.rcBaseUrl) > 0 ? `冷却中，${cooldownSec(list.rcBaseUrl)} 秒后可再次同步` : ''"
@@ -213,9 +231,11 @@
                                 </el-button>
                                 <template #dropdown>
                                     <el-dropdown-menu>
-                                        <el-dropdown-item @click="bulkIgnore(list)">忽略选中</el-dropdown-item>
-                                        <el-dropdown-item @click="bulkRestore(list)">恢复选中</el-dropdown-item>
-                                        <el-dropdown-item divided @click="bulkDelete(list)">删除选中</el-dropdown-item>
+                                        <el-dropdown-item @click="allIgnore(list)">忽略全部</el-dropdown-item>
+                                        <el-dropdown-item @click="allRestore(list)">恢复全部</el-dropdown-item>
+                                        <el-dropdown-item divided @click="allDelete(list)">
+                                            <span style="color:#F56C6C;">删除全部</span>
+                                        </el-dropdown-item>
                                     </el-dropdown-menu>
                                 </template>
                             </el-dropdown>
@@ -423,7 +443,7 @@ const TYPE_ID = 9
 const appStore = useAppStore()
 
 // ── QA 全局配置 ────────────────────────────────────────────────────────────────
-const globalQAConfig = ref({ syncIntervalMin: 1, syncPageSize: 200 })
+const globalQAConfig = ref({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null, syncEndTime: null })
 const loadQAConfig = async () => {
     try { const { data } = await axios.get(`${API}/qa-config`); globalQAConfig.value = data } catch {}
 }
@@ -459,7 +479,18 @@ const {
 } = useSyncManager({
     getCacheUrl: list =>
         `${API}/sync-cache/${TYPE_ID}?url=${encodeURIComponent(list.rcBaseUrl || '')}`,
-    filterRecords: raw => raw,
+    // 只同步「告警时间落在抓取时间范围内」的记录：全局配置优先，其次列表设置；起/止可留空 = 该端不限制
+    filterRecords: (raw, list) => {
+        const s = globalQAConfig.value?.syncStartTime || list?.syncStartTime
+        const e = globalQAConfig.value?.syncEndTime   || list?.syncEndTime
+        if (!s && !e) return raw
+        const sMs = s ? new Date(s).getTime() : -Infinity
+        const eMs = e ? new Date(e).getTime() :  Infinity
+        return raw.filter(r => {
+            const t = new Date(r.alertTime).getTime()
+            return !isNaN(t) && t >= sMs && t <= eMs
+        })
+    },
     mapRecord: item => ({
         alertId:              String(item.alertId  || ''),
         alertTime:            String(item.alertTime || ''),
@@ -538,16 +569,50 @@ const bulkRestore = list => {
 }
 const bulkDelete = async list => {
     if (!list._selectedRows.length) return
+    // 快照选中项：await 期间表格会清空 _selectedRows，必须先固定引用，否则只删零星几条
+    const selectedRows = [...list._selectedRows]
     try {
         await ElMessageBox.confirm(
-            `确认删除选中的 ${list._selectedRows.length} 条记录？`,
+            `确认删除选中的 ${selectedRows.length} 条记录？`,
             '批量删除', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
         )
-        const sel = new Set(list._selectedRows)
+        const sel = new Set(selectedRows)
         list.records = list.records.filter(r => !sel.has(r))
         list._selectedRows = []
         const maxPage = Math.max(1, Math.ceil(list.records.length / list._pageSize))
         if (list._currentPage > maxPage) list._currentPage = maxPage
+        await saveList(list, false)
+    } catch { /* cancelled */ }
+}
+
+// ── 一键全部操作 ──────────────────────────────────────────────────────────────
+const allIgnore = async list => {
+    try {
+        await ElMessageBox.confirm(`确认忽略全部 ${list.records.length} 条记录？`, '一键忽略', {
+            type: 'warning', confirmButtonText: '忽略全部', cancelButtonText: '取消'
+        })
+        list.records.forEach(r => { r.ignored = true })
+    } catch { /* cancelled */ }
+}
+const allRestore = async list => {
+    try {
+        await ElMessageBox.confirm(`确认恢复全部 ${list.records.length} 条记录？`, '一键恢复', {
+            type: 'info', confirmButtonText: '恢复全部', cancelButtonText: '取消'
+        })
+        list.records.forEach(r => { r.ignored = false })
+    } catch { /* cancelled */ }
+}
+const allDelete = async list => {
+    try {
+        await ElMessageBox.confirm(`确认删除全部 ${list.records.length} 条记录？此操作不可撤销。`, '一键删除', {
+            type: 'warning', confirmButtonText: '删除全部', cancelButtonText: '取消',
+            confirmButtonClass: 'el-button--danger'
+        })
+        list.records = []
+        list._selectedRows = []
+        list._currentPage = 1
+        await saveList(list, false)
+        ElNotification.success({ message: '全部记录已删除', position: 'bottom-right' })
     } catch { /* cancelled */ }
 }
 
@@ -590,6 +655,8 @@ const saveList = async (list) => {
             listName:  list.listName,
             configId:  list.configId || null,
             rcBaseUrl: list.rcBaseUrl || '',
+            syncStartTime: list.syncStartTime || null,
+            syncEndTime:   list.syncEndTime || null,
             records:   list.records,
         })
         list._saveState = 'idle'
@@ -612,7 +679,7 @@ const attachAutoSave = (list) => {
     if (list._autosaveOn) return
     list._autosaveOn = true
     watch(
-        () => [list.records, list.configId, list.rcBaseUrl, list.syncStartTime],
+        () => [list.records, list.configId, list.rcBaseUrl, list.syncStartTime, list.syncEndTime],
         () => queueSave(list),
         { deep: true }
     )

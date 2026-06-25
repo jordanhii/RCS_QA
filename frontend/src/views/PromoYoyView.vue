@@ -42,16 +42,21 @@
                     <div class="control-panel">
                         <div class="panel-left">
                             <span style="font-weight: 600;">关联配置:</span>
-                            <el-select v-model="list.configId" placeholder="选择配置" style="width: 220px"
+                            <el-select v-model="list.configIds" multiple collapse-tags collapse-tags-tooltip clearable
+                                placeholder="可多选配置（各优惠类型自动匹配各自配置）" style="min-width:240px;max-width:440px"
                                 @change="saveList(list, false)">
-                                <el-option v-for="c in availableConfigs" :key="c._id" :label="c.name" :value="c._id" />
+                                <el-option v-for="c in availableConfigs" :key="c._id"
+                                    :label="c.promoName ? `${c.name}（${c.promoName}）` : c.name" :value="c._id" />
                             </el-select>
-                            <el-popover v-if="getCfg(list)" placement="bottom-start" trigger="hover" :width="220">
+                            <el-popover v-if="getCfg(list)" placement="bottom-start" trigger="hover" :width="260">
                                 <template #reference>
                                     <el-icon size="14" color="#409EFF" style="cursor:help;margin-left:4px;vertical-align:middle;"><InfoFilled /></el-icon>
                                 </template>
                                 <div style="font-size:13px;line-height:2;">
-                                    <div><b>检查间隔：</b>{{ getCfg(list).alertInterval }} 分钟</div>
+                                    <div><b>普通告警：</b>≥前7天均×{{ getCfg(list).mult7 }}、≥前30天均×{{ getCfg(list).mult30 }}</div>
+                                    <div><b>连续告警：</b>≥前7天均×{{ getCfg(list).mult7Cont }}、≥前30天均×{{ getCfg(list).mult30Cont }}</div>
+                                    <div><b>连续间隔：</b>{{ getCfg(list).alertInterval }} 分钟</div>
+                                    <div style="color:#909399;font-size:12px;">每个优惠类型按「优惠类型」匹配各自配置</div>
                                 </div>
                             </el-popover>
                         </div>
@@ -105,20 +110,22 @@
                                 </span>
                             </el-tooltip>
                             <el-tooltip placement="bottom"
-                                :content="globalQAConfig.syncStartTime ? '已在质检配置中设定，子页面不支持修改' : '只导入告警时间 ≥ 此时间的数据，留空 = 不过滤'">
+                                :content="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime) ? '已在质检配置中设定，子页面不支持修改' : '只同步告警时间落在此范围内的数据，留空 = 不限制'">
                                 <span style="display:inline-block;">
                                 <el-date-picker
-                                    v-model="list.syncStartTime"
-                                    type="datetime"
-                                    :placeholder="globalQAConfig.syncStartTime ? '' : '起始时间（选填）'"
+                                    type="datetimerange"
+                                    range-separator="至"
+                                    start-placeholder="抓取起始" end-placeholder="抓取结束"
                                     format="MM-DD HH:mm"
                                     value-format="YYYY-MM-DD HH:mm:ss"
-                                    style="width:140px;"
+                                    style="width:330px;"
                                     size="small"
                                     clearable
-                                    :disabled="!!globalQAConfig.syncStartTime"
-                                    :model-value="globalQAConfig.syncStartTime || list.syncStartTime"
-                                    @update:model-value="v => { if (!globalQAConfig.syncStartTime) { list.syncStartTime = v; saveList(list, false) } }"
+                                    :disabled="!!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)"
+                                    :model-value="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)
+                                        ? [globalQAConfig.syncStartTime, globalQAConfig.syncEndTime]
+                                        : ((list.syncStartTime && list.syncEndTime) ? [list.syncStartTime, list.syncEndTime] : null)"
+                                    @update:model-value="v => { if (!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)) { list.syncStartTime = v?.[0] || null; list.syncEndTime = v?.[1] || null; saveList(list, false) } }"
                                 />
                                 </span>
                             </el-tooltip>
@@ -302,7 +309,7 @@
                         style="width: 100%"
                         size="small"
                         :row-key="(row) => row.alertId || list.records.indexOf(row)"
-                        :row-class-name="({ row }) => getRowClassName(list.records.indexOf(row), list.records, getCfg(list))"
+                        :row-class-name="({ row }) => getRowClassName(list.records.indexOf(row), list.records, getCfgForRow(list, row))"
                         @selection-change="(rows) => list._selectedRows = rows">
 
                         <el-table-column type="selection" width="40" fixed="left" reserve-selection />
@@ -351,31 +358,51 @@
                             </template>
                         </el-table-column>
 
-                        <!-- 7. 告警结果 -->
-                        <el-table-column width="140" align="center">
+                        <!-- 7. 普通告警结果 -->
+                        <el-table-column width="130" align="center">
                             <template #header>
                                 <el-tooltip placement="top">
                                     <template #content>
                                         <div style="line-height:1.8;">
                                             <div>每日只触发一次：当日该优惠类型已有更早告警 → <b style="color:#F56C6C;">FALSE</b></div>
-                                            <div style="margin-top:4px;">条件2：今日累计 ≥ 前7天平均×倍数 且 ≥ 前30天平均×倍数 → <b>TRUE</b></div>
+                                            <div style="margin-top:4px;">条件2：今日累计 ≥ 前7天平均×普通倍数 且 ≥ 前30天平均×普通倍数 → <b>TRUE</b></div>
                                             <div style="margin-top:4px;">两个对比值都缺 → 数据不足，不对比</div>
                                         </div>
                                     </template>
-                                    <span class="tip-header">告警结果&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
+                                    <span class="tip-header">普通告警结果&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
                                 </el-tooltip>
                             </template>
                             <template #default="scope">
-                                <template v-if="calcNormalResult(list.records.indexOf(scope.row), list.records, getCfg(list)) === null">
+                                <template v-if="calcNormalResult(list.records.indexOf(scope.row), list.records, getCfgForRow(list, scope.row)) === null">
                                     <span class="field-missing">⚠ 数据不足/未抓到</span>
                                 </template>
-                                <el-tag v-else :type="calcNormalResult(list.records.indexOf(scope.row), list.records, getCfg(list)) === 'TRUE' ? 'success' : 'danger'" size="small">
-                                    {{ calcNormalResult(list.records.indexOf(scope.row), list.records, getCfg(list)) }}
+                                <el-tag v-else :type="calcNormalResult(list.records.indexOf(scope.row), list.records, getCfgForRow(list, scope.row)) === 'TRUE' ? 'success' : 'danger'" size="small">
+                                    {{ calcNormalResult(list.records.indexOf(scope.row), list.records, getCfgForRow(list, scope.row)) }}
                                 </el-tag>
                             </template>
                         </el-table-column>
 
-                        <!-- 8. 风控系统判断（只读，来自同步/导入的 RC 判断） -->
+                        <!-- 8. 连续告警结果 -->
+                        <el-table-column width="130" align="center">
+                            <template #header>
+                                <el-tooltip placement="top">
+                                    <template #content>
+                                        <div style="line-height:1.8;">
+                                            <div>触发普通告警后、间隔 ≥ N 分钟再查，恶化到<br />今日累计 ≥ 前7天平均×连续倍数 且 ≥ 前30天平均×连续倍数 → <b>TRUE</b></div>
+                                            <div style="color:#bbb;margin-top:4px;font-size:12px;">当日该优惠类型首条（无更早告警）→ 显示 -</div>
+                                        </div>
+                                    </template>
+                                    <span class="tip-header">连续告警结果&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
+                                </el-tooltip>
+                            </template>
+                            <template #default="scope">
+                                <b :style="{ color: getContResultColor(calcContResult(list.records.indexOf(scope.row), list.records, getCfgForRow(list, scope.row))) }">
+                                    {{ calcContResult(list.records.indexOf(scope.row), list.records, getCfgForRow(list, scope.row)) }}
+                                </b>
+                            </template>
+                        </el-table-column>
+
+                        <!-- 9. 风控系统判断（只读，来自同步/导入的 RC 判断） -->
                         <el-table-column label="风控系统判断" width="115" align="center">
                             <template #default="scope">
                                 <el-tag v-if="scope.row.devResult"
@@ -392,7 +419,7 @@
                             <template #default="scope">
                                 <el-tag v-if="scope.row.ignored" type="info" size="small">—</el-tag>
                                 <template v-else-if="scope.row.devResult">
-                                    <el-tag v-if="calcLogicMatch(list.records.indexOf(scope.row), list.records, getCfg(list))" type="success" size="small">✓ 一致</el-tag>
+                                    <el-tag v-if="calcLogicMatch(list.records.indexOf(scope.row), list.records, getCfgForRow(list, scope.row))" type="success" size="small">✓ 一致</el-tag>
                                     <el-tag v-else type="danger" size="small">✗ 异常</el-tag>
                                 </template>
                                 <el-tag v-else type="info" size="small">待判断</el-tag>
@@ -501,9 +528,11 @@ import { PAGE_TITLES } from '../logic/alertTypes.js'
 
 import {
     calcNormalResult,
+    calcContResult,
     calcLogicMatch,
     getMatchCount as yoyGetMatchCount,
     getRowClass as yoyGetRowClass,
+    getContResultColor,
 } from '../logic/promoYoyLogic.js'
 
 const TYPE_ID = 11
@@ -523,7 +552,7 @@ const loadCollapseState = () => {
 }
 
 const globalSyncStatus = ref({ isAlive: false, updatedAt: null, transactionCount: 0, betCount: 0 })
-const globalQAConfig   = ref({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null })
+const globalQAConfig   = ref({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null, syncEndTime: null })
 const rcEnvOptions     = ref([])
 const syncTimers    = new Map()
 const cooldownEnds  = new Map()
@@ -548,6 +577,7 @@ const fetchQAConfig = async () => {
         globalQAConfig.value.syncIntervalMin = data.syncIntervalMin ?? 1
         globalQAConfig.value.syncPageSize    = data.syncPageSize    ?? 200
         globalQAConfig.value.syncStartTime   = data.syncStartTime   ?? null
+        globalQAConfig.value.syncEndTime     = data.syncEndTime     ?? null
         rcEnvOptions.value = data.rcEnvs || []
     } catch { /* use defaults */ }
 }
@@ -603,12 +633,14 @@ const runSync = async (list, isManual = false, skipRequest = false) => {
             if (fetched.length > 0 || attempt === 4) break
             await new Promise(r => setTimeout(r, skipRequest ? 500 : 3000))
         }
-        const startTime = globalQAConfig.value.syncStartTime || list.syncStartTime
-        if (startTime) {
-            const cutoff = new Date(startTime).getTime()
+        const sTime = globalQAConfig.value.syncStartTime || list.syncStartTime
+        const eTime = globalQAConfig.value.syncEndTime   || list.syncEndTime
+        if (sTime || eTime) {
+            const sMs = sTime ? new Date(sTime).getTime() : -Infinity
+            const eMs = eTime ? new Date(eTime).getTime() :  Infinity
             fetched = fetched.filter(r => {
                 const t = new Date(r.alertTime).getTime()
-                return !isNaN(t) && t >= cutoff
+                return !isNaN(t) && t >= sMs && t <= eMs
             })
         }
         const existingIds = new Set(list.records.map(r => r.alertId?.toString().trim()).filter(Boolean))
@@ -776,6 +808,8 @@ onMounted(async () => {
         availableConfigs.value = cfg.data
         allLists.value = list.data.map(l => ({
             ...l,
+            // 兼容旧数据：把单值 configId 迁移成 configIds 数组
+            configIds: (l.configIds && l.configIds.length) ? l.configIds : (l.configId ? [l.configId] : []),
             _tempName: l.listName,
             _isSaving: false,
             _saveState: 'idle',
@@ -857,11 +891,29 @@ const removeRecord = (list, absIdx) => {
     }).catch(() => {})
 }
 
-const getMatchCount = (list) => yoyGetMatchCount(list.records, getCfg(list))
+const getMatchCount = (list) => yoyGetMatchCount(list.records, row => getCfgForRow(list, row))
 
 const getRowClassName = (absIdx, records, cfg) => yoyGetRowClass(absIdx, records, cfg)
 
-const getCfg = (list) => availableConfigs.value.find(c => c._id === list.configId)
+// 列表关联的配置集合（支持多选 configIds；兼容旧的单值 configId）
+const listCfgs = (list) => {
+    const ids = (list.configIds && list.configIds.length) ? list.configIds : (list.configId ? [list.configId] : [])
+    return ids.map(id => availableConfigs.value.find(c => c._id === id)).filter(Boolean)
+}
+const getCfg = (list) => listCfgs(list)[0] || null
+
+// 配置的「优惠类型」支持多个名称（逗号分隔）：行的优惠类型命中其中任一即用该配置（大小写不敏感）。
+// 仅在「本列表关联的配置」内匹配，确保按环境隔离。
+const cfgPromoNames = c => String(c?.promoName ?? '').split(/[,，]/).map(s => s.trim()).filter(Boolean)
+const getCfgForRow = (list, row) => {
+    const name = String(row?.rewardType ?? '').trim().toLowerCase()
+    const cfgs = listCfgs(list)
+    if (name) {
+        const byName = cfgs.find(c => cfgPromoNames(c).some(n => n.toLowerCase() === name))
+        if (byName) return byName
+    }
+    return cfgs[0] || null
+}
 
 // ── 自动保存：列表数据/配置一变就存，带状态反馈，无需手动点保存 ────────────────
 const _saveTimers = new Map()
@@ -895,7 +947,7 @@ const attachAutoSave = (list) => {
     if (list._autosaveOn) return
     list._autosaveOn = true
     watch(
-        () => [list.records, list.configId, list.rcBaseUrl, list.syncStartTime],
+        () => [list.records, list.configIds, list.configId, list.rcBaseUrl, list.syncStartTime, list.syncEndTime],
         () => queueSave(list),
         { deep: true }
     )
@@ -917,7 +969,8 @@ const createNewList = () => ElMessageBox.prompt('为新列表起个名字，用�
 }).then(async ({ value }) => {
     const res = await axios.post(`${API}/test-lists`, { typeId: TYPE_ID, listName: value, records: [] })
     allLists.value.push({
-        ...res.data, _tempName: res.data.listName,
+        ...res.data, configIds: (res.data.configIds && res.data.configIds.length) ? res.data.configIds : [],
+        _tempName: res.data.listName,
         _isSaving: false, _saveState: 'idle', _savedAt: null,
         _currentPage: 1, _pageSize: 30, _customPageSize: null, _selectedRows: [],
         _syncEnabled: false, _lastSyncAt: null, _isSyncingNow: false, _isImportingSync: false, /* keep for saveList destructure compat */
@@ -946,15 +999,18 @@ const bulkRestore = (list) => {
 }
 const bulkDelete = async (list) => {
     if (!list._selectedRows.length) return
+    // 快照选中项：await 期间表格会清空 _selectedRows，必须先固定引用，否则只删零星几条
+    const selectedRows = [...list._selectedRows]
     try {
-        await ElMessageBox.confirm(`确认删除选中的 ${list._selectedRows.length} 条记录？`, '批量删除', {
+        await ElMessageBox.confirm(`确认删除选中的 ${selectedRows.length} 条记录？`, '批量删除', {
             type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
         })
-        const sel = new Set(list._selectedRows)
+        const sel = new Set(selectedRows)
         list.records = list.records.filter(r => !sel.has(r))
         list._selectedRows = []
         const maxPage = Math.max(1, Math.ceil(list.records.length / list._pageSize))
         if (list._currentPage > maxPage) list._currentPage = maxPage
+        await saveList(list, false)
     } catch {}
 }
 

@@ -49,27 +49,28 @@
                         </div>
                         <div class="param-row" style="border-bottom:none;">
                             <div class="param-row-label">
-                                同步起始时间
+                                同步抓取时间范围
                                 <el-tooltip placement="top">
                                     <template #content>
-                                        设置后，自动同步只导入告警时间 ≥ 此时间的数据，更早的数据会被过滤掉。<br />
-                                        留空 = 不过滤，导入全部抓到的数据。
+                                        设置后，自动同步只导入告警时间落在此范围内的数据，范围外的会被过滤掉。<br />
+                                        起/止可任填或留空（留空 = 该端不限制）；全部留空 = 不过滤。
                                     </template>
                                     <el-icon size="13" color="#c0c4cc" style="cursor:help;"><InfoFilled /></el-icon>
                                 </el-tooltip>
                             </div>
                             <el-date-picker
-                                v-model="form.syncStartTime"
-                                type="datetime"
-                                placeholder="留空 = 不过滤"
+                                type="datetimerange"
+                                range-separator="至"
+                                start-placeholder="起始" end-placeholder="结束"
                                 format="YYYY-MM-DD HH:mm"
                                 value-format="YYYY-MM-DD HH:mm:ss"
-                                style="width: 200px;"
+                                style="width: 380px;"
                                 clearable
-                                @change="queueSave"
+                                :model-value="(form.syncStartTime || form.syncEndTime) ? [form.syncStartTime, form.syncEndTime] : null"
+                                @update:model-value="v => { form.syncStartTime = v?.[0] || null; form.syncEndTime = v?.[1] || null; queueSave() }"
                             />
-                            <span v-if="form.syncStartTime" style="font-size:12px; color:#E6A23C; margin-left:8px;">
-                                仅导入 {{ form.syncStartTime.slice(0,16) }} 之后的告警
+                            <span v-if="form.syncStartTime || form.syncEndTime" style="font-size:12px; color:#E6A23C; margin-left:8px;">
+                                仅导入 {{ form.syncStartTime ? form.syncStartTime.slice(0,16) : '不限' }} ~ {{ form.syncEndTime ? form.syncEndTime.slice(0,16) : '不限' }} 的告警
                             </span>
                         </div>
                     </div>
@@ -411,7 +412,7 @@ const API = 'http://localhost:3000/api'
 const isLoading = ref(false)
 const saveState = ref('idle')   // 'idle' | 'saving' | 'error'
 const savedAt   = ref(null)
-const form = reactive({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null })
+const form = reactive({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null, syncEndTime: null })
 
 // ── RC 环境地址（只读，管理入口在「接口配置」页面）─────────────────────────
 const rcEnvs = ref([])
@@ -423,6 +424,7 @@ const load = async () => {
         form.syncIntervalMin = res.data.syncIntervalMin ?? 1
         form.syncPageSize    = res.data.syncPageSize    ?? 200
         form.syncStartTime   = res.data.syncStartTime   ?? null
+        form.syncEndTime     = res.data.syncEndTime     ?? null
         exportForm.domain    = res.data.rcBaseUrl       || ''
         rcEnvs.value         = res.data.rcEnvs          || []
     } catch { /* use defaults */ } finally {
@@ -442,6 +444,7 @@ const saveSync = async () => {
             syncIntervalMin: form.syncIntervalMin,
             syncPageSize:    form.syncPageSize,
             syncStartTime:   form.syncStartTime || null,
+            syncEndTime:     form.syncEndTime || null,
         })
         saveState.value = 'idle'
         savedAt.value   = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })

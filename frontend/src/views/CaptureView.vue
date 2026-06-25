@@ -212,7 +212,7 @@ const GROUP_HINTS = {
     9: '存提差环比 — netflow-additional-present-day，对比当前与上期存提差',
     10: '存提差同比 — netflow-additional-historical，对比日累计存提差与历史同期',
     11: '优惠同比 — reward-cumulative，今日累计优惠 ≥ 前7天/前30天平均×倍数（阈值取自注释）',
-    12: '优惠环比 — reward-interval，本时段增长 ≥ 上时段增长×倍数（阈值取自注释）',
+    12: '优惠环比 — reward-interval，数据来自 alertContent（\\n 分隔 8 段）；普通×B / 连续×C',
 }
 const currentGroupHint = computed(() => GROUP_HINTS[Number(activeTab.value)] || '')
 
@@ -275,7 +275,7 @@ const LIST_FIELDS = {
         { value: 'alertId',   label: '告警单号' },
         { value: 'alertTime', label: '告警时间' },
         { value: 'val1',      label: '投注金额' },
-        { value: 'val2',      label: '存款金额' },
+        { value: 'val2',      label: '存款金额*阈值' },
         { value: 'devResult', label: '风控系统判断' },
     ],
     7: [
@@ -450,25 +450,26 @@ const DEFAULT_FIELDS = {
         { listField: 'lowerThanLastMonth',  path: 'lowerThanLastMonth' },
         { listField: 'devResult',           path: 'alertNumber' },
     ],
-    // ⚠️ 优惠同比/环比的 RC 接口字段路径为占位默认，请在「接口配置」页对照真实接口确认/修改
+    // ⚠️ 优惠同比(11)/环比(12) 数据塞在 /rewardAlerts 的 alertContent 字符串里（\n 分隔），
+    //    由后端 formatRewardRecord 按段位解析，此处 path 仅作映射说明，不参与实际取值。
     11: [
-        { listField: 'alertId',    path: 'alertNumber' },
-        { listField: 'alertTime',  path: 'alertGeneratedTime' },
-        { listField: 'rewardType', path: 'alertMetadata.rewardType' },
-        { listField: 'todayTotal', path: 'alertMetadata.todayTotalReward' },
-        { listField: 'avg7',       path: 'alertMetadata.last7DaysAvg' },
-        { listField: 'avg30',      path: 'alertMetadata.last30DaysAvg' },
-        { listField: 'devResult',  path: 'alertNumber' },
+        { listField: 'alertId',    path: 'alertId' },
+        { listField: 'alertTime',  path: 'alertCreateTime' },
+        { listField: 'rewardType', path: 'alertContent[0] 优惠类型' },
+        { listField: 'todayTotal', path: 'alertContent[1] 今日累计优惠' },
+        { listField: 'avg7',       path: 'alertContent[3] 前7天平均×倍数' },
+        { listField: 'avg30',      path: 'alertContent[5] 前30天平均×倍数' },
+        { listField: 'devResult',  path: '恒为 TRUE（已触发告警）' },
     ],
     12: [
-        { listField: 'alertId',       path: 'alertNumber' },
-        { listField: 'alertTime',     path: 'alertGeneratedTime' },
-        { listField: 'rewardType',    path: 'alertMetadata.rewardType' },
-        { listField: 'todayTotal',    path: 'alertMetadata.todayTotalReward' },
-        { listField: 'currentGrowth', path: 'alertMetadata.currentPeriodGrowth' },
-        { listField: 'lastGrowth',    path: 'alertMetadata.lastPeriodGrowth' },
-        { listField: 'alertSeq',      path: 'alertMetadata.alertSeq' },
-        { listField: 'devResult',     path: 'alertNumber' },
+        { listField: 'alertId',       path: 'alertId' },
+        { listField: 'alertTime',     path: 'alertCreateTime' },
+        { listField: 'rewardType',    path: 'alertContent[0] 优惠类型' },
+        { listField: 'todayTotal',    path: 'alertContent[1] 今日累计优惠' },
+        { listField: 'currentGrowth', path: 'alertContent[3] 本时段增长' },
+        { listField: 'lastGrowth',    path: 'alertContent[6]÷[5] 原始上时段增长' },
+        { listField: 'alertSeq',      path: 'RCS_QA 计算（同日同类型计数，不抓取）' },
+        { listField: 'devResult',     path: '恒为 TRUE（已触发告警）' },
     ],
 }
 

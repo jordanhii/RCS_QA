@@ -75,7 +75,7 @@ export function useSyncManager({ getCacheUrl, filterRecords, mapRecord, onNewRec
                 const { data } = await axios.get(getCacheUrl(list))
                 const allRaw = data.data || []
                 rawCount = data.totalRaw ?? allRaw.length
-                fetched  = filterRecords(allRaw)
+                fetched  = filterRecords(allRaw, list)
                 if (fetched.length > 0 || attempt === 11) break
                 await new Promise(r => setTimeout(r, 5000))
             }

@@ -20,6 +20,7 @@ import json
 import re
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import pyotp
@@ -139,6 +140,29 @@ def extract_records(text: str) -> list:
         except Exception:
             continue
     return recs
+
+
+def record_local_time(r: dict) -> str:
+    """返回用于起始时间过滤的本地时间字符串 'YYYY-MM-DD HH:mm:ss'。
+
+    不同接口的时间字段不同：
+      - 存提款/投注/存提差等：alertGeneratedTime（RC 已是本地时间，直接用）
+      - 优惠告警(/rewardAlerts)：alertCreateTime（UTC ISO，带 Z，需转 +8 本地）
+    取不到则回退 alertTime，仍取不到返回 ''（过滤时被排除）。
+    """
+    t = r.get("alertGeneratedTime")
+    if t:
+        return str(t)
+    t = r.get("alertCreateTime")
+    if t:
+        s = str(t)
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            dt = dt.astimezone(timezone(timedelta(hours=8)))
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return s
+    return r.get("alertTime") or ""
 
 
 def err_exit(msg: str, hint: str = "") -> None:
@@ -409,7 +433,7 @@ def main():
     start_time = args.start_time.strip()
     if start_time:
         before = len(records)
-        records = [r for r in records if (r.get("alertTime") or "") >= start_time]
+        records = [r for r in records if record_local_time(r) >= start_time]
         plog(f"🕐 起始时间过滤 ≥ {start_time}：保留 {len(records)} / 排除 {before - len(records)} 条")
         if not records:
             err_exit(f"起始时间过滤后无数据（startTime={start_time}）")

@@ -142,20 +142,22 @@
                                 </span>
                             </el-tooltip>
                             <el-tooltip placement="bottom"
-                                :content="globalQAConfig.syncStartTime ? '已在质检配置中设定，子页面不支持修改' : '只导入告警时间 ≥ 此时间的数据，留空 = 不过滤'">
+                                :content="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime) ? '已在质检配置中设定，子页面不支持修改' : '只同步告警时间落在此范围内的数据，留空 = 不限制'">
                                 <span style="display:inline-block;">
                                 <el-date-picker
-                                    v-model="list.syncStartTime"
-                                    type="datetime"
-                                    :placeholder="globalQAConfig.syncStartTime ? '' : '起始时间（选填）'"
+                                    type="datetimerange"
+                                    range-separator="至"
+                                    start-placeholder="抓取起始" end-placeholder="抓取结束"
                                     format="MM-DD HH:mm"
                                     value-format="YYYY-MM-DD HH:mm:ss"
-                                    style="width:140px;"
+                                    style="width:330px;"
                                     size="small"
                                     clearable
-                                    :disabled="!!globalQAConfig.syncStartTime"
-                                    :model-value="globalQAConfig.syncStartTime || list.syncStartTime"
-                                    @update:model-value="v => { if (!globalQAConfig.syncStartTime) { list.syncStartTime = v; saveList(list, false) } }"
+                                    :disabled="!!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)"
+                                    :model-value="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)
+                                        ? [globalQAConfig.syncStartTime, globalQAConfig.syncEndTime]
+                                        : ((list.syncStartTime && list.syncEndTime) ? [list.syncStartTime, list.syncEndTime] : null)"
+                                    @update:model-value="v => { if (!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)) { list.syncStartTime = v?.[0] || null; list.syncEndTime = v?.[1] || null; saveList(list, false) } }"
                                 />
                                 </span>
                             </el-tooltip>
@@ -516,7 +518,7 @@ const loadAvailableConfigs = async () => {
 // getX / getY 从 gameProfitLogic.js 导入，接受 cfg 对象（非 list）
 
 // ── QA 全局配置 ────────────────────────────────────────────────────────────────
-const globalQAConfig = ref({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null })
+const globalQAConfig = ref({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null, syncEndTime: null })
 const loadQAConfig = async () => {
     try {
         const { data } = await axios.get(`${API}/qa-config`)
@@ -650,6 +652,8 @@ const saveList = async (list) => {
             rcBaseUrl: list.rcBaseUrl,
             configId: list.configId || null,
             ignoreC2: list.ignoreC2 ?? false,
+            syncStartTime: list.syncStartTime || null,
+            syncEndTime: list.syncEndTime || null,
             records: list.records.map(r => ({
                 alertId: r.alertId, alertTime: r.alertTime,
                 currentBet: r.currentBet, betMedian: r.betMedian,
@@ -681,7 +685,7 @@ const attachAutoSave = (list) => {
     if (list._autosaveOn) return
     list._autosaveOn = true
     watch(
-        () => [list.records, list.configId, list.rcBaseUrl, list.ignoreC2, list.syncStartTime],
+        () => [list.records, list.configId, list.rcBaseUrl, list.ignoreC2, list.syncStartTime, list.syncEndTime],
         () => queueSave(list),
         { deep: true }
     )
@@ -745,11 +749,14 @@ const bulkIgnore  = list => { const sel = new Set(list._selectedRows); list.reco
 const bulkRestore = list => { const sel = new Set(list._selectedRows); list.records.forEach(r => { if (sel.has(r)) r.ignored = false }); list._selectedRows = [] }
 const bulkDelete  = async list => {
     if (!list._selectedRows.length) return
+    // 快照选中项：await 期间表格会清空 _selectedRows，必须先固定引用，否则只删零星几条
+    const selectedRows = [...list._selectedRows]
     try {
-        await ElMessageBox.confirm(`确认删除选中的 ${list._selectedRows.length} 条记录？`, '批量删除', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
-        const sel = new Set(list._selectedRows)
+        await ElMessageBox.confirm(`确认删除选中的 ${selectedRows.length} 条记录？`, '批量删除', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+        const sel = new Set(selectedRows)
         list.records = list.records.filter(r => !sel.has(r))
         list._selectedRows = []
+        await saveList(list, false)
     } catch {}
 }
 const allIgnore = async list => {
@@ -857,13 +864,15 @@ const runSync = async (list, isManual = false, skipRequest = false) => {
             await new Promise(r => setTimeout(r, retryDelay))
         }
 
-        // 起始时间过滤（用 alertGeneratedTime 字段）
-        const startTime = globalQAConfig.value.syncStartTime || list.syncStartTime
-        if (startTime) {
-            const cutoff = new Date(startTime).getTime()
+        // 抓取时间范围过滤（用 alertGeneratedTime 字段）：起/止可留空 = 该端不限制
+        const sTime = globalQAConfig.value.syncStartTime || list.syncStartTime
+        const eTime = globalQAConfig.value.syncEndTime   || list.syncEndTime
+        if (sTime || eTime) {
+            const sMs = sTime ? new Date(sTime).getTime() : -Infinity
+            const eMs = eTime ? new Date(eTime).getTime() :  Infinity
             fetched = fetched.filter(item => {
                 const t = new Date(item.alertGeneratedTime).getTime()
-                return !isNaN(t) && t >= cutoff
+                return !isNaN(t) && t >= sMs && t <= eMs
             })
         }
 

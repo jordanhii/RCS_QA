@@ -121,20 +121,22 @@
                             </el-tooltip>
                             <!-- 同步起始时间 -->
                             <el-tooltip placement="bottom"
-                                :content="globalQAConfig.syncStartTime ? '已在质检配置中设定，子页面不支持修改' : '只导入告警时间 ≥ 此时间的数据，留空 = 不过滤'">
+                                :content="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime) ? '已在质检配置中设定，子页面不支持修改' : '只同步告警时间落在此范围内的数据，留空 = 不限制'">
                                 <span style="display:inline-block;">
                                 <el-date-picker
-                                    v-model="list.syncStartTime"
-                                    type="datetime"
-                                    :placeholder="globalQAConfig.syncStartTime ? '' : '起始时间（选填）'"
+                                    type="datetimerange"
+                                    range-separator="至"
+                                    start-placeholder="抓取起始" end-placeholder="抓取结束"
                                     format="MM-DD HH:mm"
                                     value-format="YYYY-MM-DD HH:mm:ss"
-                                    style="width:140px;"
+                                    style="width:330px;"
                                     size="small"
                                     clearable
-                                    :disabled="!!globalQAConfig.syncStartTime"
-                                    :model-value="globalQAConfig.syncStartTime || list.syncStartTime"
-                                    @update:model-value="v => { if (!globalQAConfig.syncStartTime) { list.syncStartTime = v; saveList(list, false) } }"
+                                    :disabled="!!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)"
+                                    :model-value="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)
+                                        ? [globalQAConfig.syncStartTime, globalQAConfig.syncEndTime]
+                                        : ((list.syncStartTime && list.syncEndTime) ? [list.syncStartTime, list.syncEndTime] : null)"
+                                    @update:model-value="v => { if (!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)) { list.syncStartTime = v?.[0] || null; list.syncEndTime = v?.[1] || null; saveList(list, false) } }"
                                 />
                                 </span>
                             </el-tooltip>
@@ -332,6 +334,13 @@
                             </template>
                         </el-table-column>
 
+                        <!-- 存款金额 (typeId 5/6)：系统计算的真实存款 = 存款金额*阈值 / 比例 -->
+                        <el-table-column v-if="[5, 6].includes(typeId)" label="存款金额" min-width="120" align="right">
+                            <template #default="scope">
+                                {{ scope.row.val2 ? Math.round(calcRealDeposit(scope.row, getCfg(list), typeId)).toLocaleString() : '—' }}
+                            </template>
+                        </el-table-column>
+
                         <!-- 存提差环比专属列 (typeId 9) -->
                         <template v-if="typeId === 9">
                             <el-table-column label="当前存款额" min-width="110">
@@ -371,7 +380,7 @@
                         <!-- 比值列 (typeId 5/6/7) -->
                         <el-table-column v-if="[5, 6, 7].includes(typeId)" :label="ratioLabel" width="95" align="center">
                             <template #default="scope">
-                                {{ scope.row.val2 ? (scope.row.val1 / scope.row.val2).toFixed(4) : 0 }}
+                                {{ scope.row.val2 ? calcRatio(scope.row, getCfg(list), typeId).toFixed(4) : 0 }}
                             </template>
                         </el-table-column>
 
@@ -589,7 +598,7 @@ import * as XLSX from 'xlsx'
 import { CircleCheck, CircleClose, Loading, Plus, Edit, Check, Upload, InfoFilled, Warning, DocumentAdd, ArrowDown } from '@element-plus/icons-vue'
 
 import { ALERT_TYPE_MAP, PAGE_TITLES, TYPE_DISPLAY_NAMES, CONT_TYPE_OPTIONS, getVal1Label, getVal2Label, getRatioLabel } from '../logic/alertTypes.js'
-import { calcNormalResult, calcContResult, calcLogicMatch, getContResultColor } from '../logic/alertLogic.js'
+import { calcNormalResult, calcContResult, calcLogicMatch, getContResultColor, calcRatio, calcRealDeposit } from '../logic/alertLogic.js'
 import { fmtDate, filterByAlertType, getTimeRange, mapExcelRows } from '../logic/importMapper.js'
 import {
     calcDecline as nfCalcDecline,
@@ -632,7 +641,7 @@ const loadCollapseState = () => {
 
 // ─── 全局同步服务状态 ─────────────────────────────────────────────────────────
 const globalSyncStatus = ref({ isAlive: false, updatedAt: null, transactionCount: 0, betCount: 0 })
-const globalQAConfig   = ref({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null })
+const globalQAConfig   = ref({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null, syncEndTime: null })
 const rcEnvOptions     = ref([])   // 来自质检配置的 RC 地址列表
 const syncTimers    = new Map()   // listId → intervalId
 const cooldownEnds  = new Map()   // normUrl → timestamp when cooldown expires
@@ -660,6 +669,7 @@ const fetchQAConfig = async () => {
         globalQAConfig.value.syncIntervalMin = data.syncIntervalMin ?? 1
         globalQAConfig.value.syncPageSize    = data.syncPageSize    ?? 200
         globalQAConfig.value.syncStartTime   = data.syncStartTime   ?? null
+        globalQAConfig.value.syncEndTime     = data.syncEndTime     ?? null
         rcEnvOptions.value = data.rcEnvs || []
     } catch { /* use defaults */ }
 }
@@ -735,17 +745,19 @@ const runSync = async (list, isManual = false, skipRequest = false) => {
             await new Promise(r => setTimeout(r, skipRequest ? 500 : 3000))
         }
 
-        // 起始时间过滤：列表级时间优先，fallback 全局配置
-        const startTime = globalQAConfig.value.syncStartTime || list.syncStartTime
-        if (startTime) {
-            const cutoff = new Date(startTime).getTime()
+        // 抓取时间范围过滤：列表级优先，fallback 全局配置；起/止可留空 = 该端不限制
+        const sTime = globalQAConfig.value.syncStartTime || list.syncStartTime
+        const eTime = globalQAConfig.value.syncEndTime   || list.syncEndTime
+        if (sTime || eTime) {
+            const sMs = sTime ? new Date(sTime).getTime() : -Infinity
+            const eMs = eTime ? new Date(eTime).getTime() :  Infinity
             const before = fetched.length
             fetched = fetched.filter(r => {
                 const t = new Date(r.alertTime).getTime()
-                return !isNaN(t) && t >= cutoff
+                return !isNaN(t) && t >= sMs && t <= eMs
             })
             if (fetched.length < before)
-                console.log(`[syncStartTime] 过滤掉 ${before - fetched.length} 条早于 ${startTime} 的数据`)
+                console.log(`[syncTimeRange] 过滤掉 ${before - fetched.length} 条不在 [${sTime || '不限'} ~ ${eTime || '不限'}] 的数据`)
         }
 
         const existingIds = new Set(
@@ -1033,7 +1045,7 @@ const attachAutoSave = (list) => {
     if (list._autosaveOn) return
     list._autosaveOn = true
     watch(
-        () => [list.records, list.configId, list.rcBaseUrl, list.syncStartTime],
+        () => [list.records, list.configId, list.rcBaseUrl, list.syncStartTime, list.syncEndTime],
         () => queueSave(list),
         { deep: true }
     )
@@ -1091,16 +1103,20 @@ const bulkRestore = (list) => {
 
 const bulkDelete = async (list) => {
     if (!list._selectedRows.length) return
+    // 快照选中项：await 期间表格会因 reserve-selection 重新对账而清空 _selectedRows，
+    // 必须在弹确认框之前把引用固定下来，否则确认后只剩零星几条被删。
+    const selectedRows = [...list._selectedRows]
     try {
         await ElMessageBox.confirm(
-            `确认删除选中的 ${list._selectedRows.length} 条记录？`,
+            `确认删除选中的 ${selectedRows.length} 条记录？`,
             '批量删除', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
         )
-        const sel = new Set(list._selectedRows)
+        const sel = new Set(selectedRows)
         list.records = list.records.filter(r => !sel.has(r))
         list._selectedRows = []
         const maxPage = Math.max(1, Math.ceil(list.records.length / list._pageSize))
         if (list._currentPage > maxPage) list._currentPage = maxPage
+        await saveList(list, false)
     } catch { /* cancelled */ }
 }
 

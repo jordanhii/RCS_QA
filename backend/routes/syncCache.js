@@ -310,9 +310,10 @@ function resolveContTypeSrv(cur, prev, durationMin = 30) {
 // 时间字段是 alertCreateTime（UTC ISO，带 Z），需转成 +8 本地时间字符串，
 // 与其它告警页的 alertGeneratedTime（"YYYY-MM-DD HH:mm:ss" 本地时间）保持一致。
 //
-// 口径（已与用户确认）：直接存 RC 已算好的阈值，前端质检配置倍数设 1。
 //   环比(12) alertContent 8 段：
 //     [0]优惠类型 [1]今日累计优惠 [2]本N分钟 [3]本时段增长 [4]上N分钟 [5]倍数 [6]上时段增长×倍数 [7]今日第N个告警
+//     ⚠ lastGrowth 存「原始上时段增长」= [6]÷[5]，让质检按配置的普通(B)/连续(C)倍数各自重算，
+//       而不是直接吃 RC 已乘好的阈值（否则普通、连续两套倍数无法分别校验）。
 //   同比(11) alertContent 6 段：
 //     [0]优惠类型 [1]今日累计优惠 [2]前7天倍数 [3]前7天平均×倍数 [4]前30天倍数 [5]前30天平均×倍数
 const REWARD_TZ_OFFSET_MS = 8 * 3600 * 1000   // RC 显示用 +8
@@ -338,6 +339,19 @@ function rewardNum(s) {
     return Number.isNaN(n) ? null : n
 }
 
+/**
+ * 还原「原始上时段增长」：RC 在 alertContent 里给的是 上时段增长×倍数（阈值），
+ * 除回倍数得到原始增长，质检再用配置的 B/C 各自相乘校验普通/连续告警。
+ * 倍数缺失或为 0 → 无法还原，退回阈值原值。除法用 1e6 四舍五入消除浮点噪声。
+ */
+function rewardRawLast(thresholdStr, multStr) {
+    const t = rewardNum(thresholdStr)
+    if (t === null) return null
+    const m = rewardNum(multStr)
+    if (m === null || m === 0) return t
+    return Math.round((t / m) * 1e6) / 1e6
+}
+
 function formatRewardRecord(item, typeId) {
     const alertId   = String(item.alertId ?? item.alertNumber ?? '')
     const alertTime = rewardLocalTime(item.alertCreateTime || item.alertGeneratedTime || '')
@@ -352,12 +366,14 @@ function formatRewardRecord(item, typeId) {
         ignored:    false,
     }
     if (typeId === 12) {
-        base.currentGrowth = rewardNum(parts[3])   // 本时段增长
-        base.lastGrowth    = rewardNum(parts[6])   // 上时段增长×倍数（已含倍数）
-        base.alertSeq      = rewardNum(parts[7])   // 今日第 N 个告警
+        base.currentGrowth = rewardNum(parts[3])              // 本时段增长
+        base.lastGrowth    = rewardRawLast(parts[6], parts[5]) // 原始上时段增长 = 阈值÷倍数
+        // 今日第 N 个告警（parts[7]）不再抓取，改由前端按同日同类型计算，避免依赖 RC 口径
     } else {
-        base.avg7  = rewardNum(parts[3])           // 前7天平均×倍数
-        base.avg30 = rewardNum(parts[5])           // 前30天平均×倍数
+        // ⚠ RC 在 alertContent 里给的是「平均×RC倍数」(阈值)，[2]/[4] 是 RC 倍数。
+        //   除回倍数得到原始平均，质检再按配置自己的倍数(普通/连续)相乘校验，避免倍数被乘两次。
+        base.avg7  = rewardRawLast(parts[3], parts[2])  // 原始前7天平均 = 前7天阈值÷RC倍数
+        base.avg30 = rewardRawLast(parts[5], parts[4])  // 原始前30天平均 = 前30天阈值÷RC倍数
     }
     return base
 }

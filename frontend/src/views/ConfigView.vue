@@ -242,8 +242,24 @@
                         </div>
                     </template>
 
-                    <!-- 优惠同比 (11)：起步判断额 + 前7天倍数 + 前30天倍数（镜像风控优惠监控配置） -->
+                    <!-- 优惠同比 (11)：优惠类型 + 起步判断额 + 前7/30天普通倍数 + 连续告警间隔/连续倍数（镜像风控优惠监控配置） -->
                     <template v-if="Number(activeTab) === 11">
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                优惠类型
+                                <el-tooltip placement="top">
+                                    <template #content>该配置适用的优惠类型，可多选（与告警里的优惠类型一致，大小写不敏感）；检查时各优惠类型自动匹配各自配置</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-select
+                                :model-value="cfgPromoNames(cfg)"
+                                multiple filterable allow-create default-first-option :reserve-keyword="false"
+                                placeholder="选择优惠类型（可多选）" style="width:300px;"
+                                @update:model-value="v => { cfg.promoName = v.join(','); queueSaveCfg(cfg) }">
+                                <el-option v-for="t in REWARD_TYPE_OPTIONS" :key="t" :label="t" :value="t" />
+                            </el-select>
+                        </div>
                         <div class="param-row">
                             <div class="param-row-label">
                                 日累计优惠起步判断额
@@ -257,30 +273,79 @@
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">
-                                ≥前7天平均 × 倍数
+                                普通告警 ≥前7天平均 × 倍数
                                 <el-tooltip placement="top">
-                                    <template #content>今日累计优惠 ≥ 前7天平均日累计优惠 × 此倍数（条件2之一，倍数 ≥1）</template>
+                                    <template #content>普通告警：今日累计优惠 ≥ 前7天平均日累计优惠 × 此倍数（条件2之一，倍数 ≥1）</template>
                                     <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.mult7" :min="1" :step="0.1" :precision="2"
-                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
+                                controls-position="right" style="width:160px;" @change="onYoyMultChange(cfg)" />
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">
-                                ≥前30天平均 × 倍数
+                                普通告警 ≥前30天平均 × 倍数
                                 <el-tooltip placement="top">
-                                    <template #content>今日累计优惠 ≥ 前30天平均日累计优惠 × 此倍数（条件2之二，倍数 ≥1）</template>
+                                    <template #content>普通告警：今日累计优惠 ≥ 前30天平均日累计优惠 × 此倍数（条件2之二，倍数 ≥1）</template>
                                     <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.mult30" :min="1" :step="0.1" :precision="2"
+                                controls-position="right" style="width:160px;" @change="onYoyMultChange(cfg)" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                连续告警间隔（分钟）
+                                <el-tooltip placement="top">
+                                    <template #content>触发普通告警后，需至少间隔 N 分钟（X 分钟后再查），才允许再次触发连续告警</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.alertInterval" :min="1" :step="5"
                                 controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                连续告警 ≥前7天平均 × 倍数
+                                <el-tooltip placement="top">
+                                    <template #content>连续告警：恶化到 今日累计 ≥ 前7天平均 × 此倍数；须大于普通告警的前7天倍数</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.mult7Cont" :min="1" :step="0.1" :precision="2"
+                                controls-position="right" style="width:160px;" @change="onYoyMultContChange(cfg)" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                连续告警 ≥前30天平均 × 倍数
+                                <el-tooltip placement="top">
+                                    <template #content>连续告警：恶化到 今日累计 ≥ 前30天平均 × 此倍数；须大于普通告警的前30天倍数</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.mult30Cont" :min="1" :step="0.1" :precision="2"
+                                controls-position="right" style="width:160px;" @change="onYoyMultContChange(cfg)" />
                         </div>
                     </template>
 
-                    <!-- 优惠环比 (12)：环比间隔 + 上时段倍数 -->
+                    <!-- 优惠环比 (12)：优惠名称 + 环比间隔 + 上时段倍数 -->
                     <template v-if="Number(activeTab) === 12">
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                优惠名称
+                                <el-tooltip placement="top">
+                                    <template #content>该配置适用的优惠类型，可多选（与告警里的优惠类型一致，大小写不敏感）；检查时各优惠类型自动匹配各自配置</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-select
+                                :model-value="cfgPromoNames(cfg)"
+                                multiple filterable allow-create default-first-option :reserve-keyword="false"
+                                placeholder="选择优惠类型（可多选）" style="width:300px;"
+                                @update:model-value="v => { cfg.promoName = v.join(','); queueSaveCfg(cfg) }">
+                                <el-option v-for="t in REWARD_TYPE_OPTIONS" :key="t" :label="t" :value="t" />
+                            </el-select>
+                        </div>
                         <div class="param-row">
                             <div class="param-row-label">
                                 环比间隔时间（分钟）
@@ -294,14 +359,25 @@
                         </div>
                         <div class="param-row">
                             <div class="param-row-label">
-                                ≥上时段 × 倍数
+                                普通告警 ≥上时段 × 倍数 (B)
                                 <el-tooltip placement="top">
-                                    <template #content>本时段增长 ≥ 上时段增长 × 此倍数 时告警（倍数 ≥1）</template>
+                                    <template #content>普通告警：本时段增长 ≥ 上时段增长 × 此倍数 时告警（倍数 ≥1）</template>
                                     <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
                                 </el-tooltip>
                             </div>
                             <el-input-number v-model="cfg.multLast" :min="1" :step="0.1" :precision="2"
-                                controls-position="right" style="width:160px;" @change="queueSaveCfg(cfg)" />
+                                controls-position="right" style="width:160px;" @change="onMultLastChange(cfg)" />
+                        </div>
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                连续告警 ≥上时段（连续）× 倍数 (C)
+                                <el-tooltip placement="top">
+                                    <template #content>连续告警：触发后同周期内 本时段增长 ≥ 上时段增长 × 此倍数 时再告警；须大于普通告警倍数(B)</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-input-number v-model="cfg.multLastCont" :min="1" :step="0.1" :precision="2"
+                                controls-position="right" style="width:160px;" @change="onMultLastContChange(cfg)" />
                         </div>
                     </template>
 
@@ -324,6 +400,10 @@ import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { ElNotification, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Check, Close, InfoFilled, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { REWARD_TYPE_OPTIONS } from '../logic/alertTypes.js'
+
+// 配置的「优惠类型」存为逗号分隔字符串，支持多选；下拉绑定用数组
+const cfgPromoNames = c => String(c?.promoName ?? '').split(/[,，]/).map(s => s.trim()).filter(Boolean)
 
 const API = 'http://localhost:3000/api'
 const activeTab = ref('1')
@@ -354,8 +434,8 @@ const GROUP_HINTS = {
     8: '游戏盈利(CG) — 检测 COLORGAME 普通告警（C1 AND C2）与连续告警（C1 AND C2 AND C3）',
     9: '存提差环比 — 每 X 分钟检查，Last存提差 − 当前存提差 ≥ Y 时触发',
     10: '存提差同比 — 日累计提款 ≥ X 且存提差 < 任意两个历史值时触发',
-    11: '优惠同比 — 自校验：今日累计 ≥ 前7天/前30天阈值（阈值取自注释，无需配置参数）',
-    12: '优惠环比 — 自校验：本时段增长 ≥ 上时段阈值（阈值取自注释，无需配置参数）',
+    11: '优惠同比 — 普通告警：今日累计 ≥ 前7天/前30天平均×倍数；连续告警：间隔后恶化到 ≥ 前7天/前30天平均×连续倍数；每个优惠类型可独立配置',
+    12: '优惠环比 — 普通告警：本时段增长 ≥ 上时段×B；连续告警：同周期内 ≥ 上时段×C（C>B）；每个优惠类型可独立配置',
 }
 const currentGroupHint = computed(() => GROUP_HINTS[Number(activeTab.value)] || '')
 
@@ -371,6 +451,14 @@ const loadConfigs = async () => {
             xThreshold:     c.xThreshold    ?? 2500,
             yThreshold:     c.yThreshold    ?? 10,
             alertInterval:  c.alertInterval ?? 60,
+            startThreshold: c.startThreshold ?? 0,
+            mult7:          c.mult7          ?? 1.2,
+            mult30:         c.mult30         ?? 1.2,
+            mult7Cont:      c.mult7Cont      ?? 1.5,
+            mult30Cont:     c.mult30Cont     ?? 1.5,
+            multLast:       c.multLast       ?? 1.2,
+            multLastCont:   c.multLastCont   ?? 1.5,
+            promoName:      c.promoName      ?? '',
             _isEditingName: false,
             _tempName:      c.name,
             _saveState:     'idle',
@@ -388,6 +476,34 @@ const queueSaveCfg = (cfg) => {
     clearTimeout(_saveTimers.get(cfg._id))
     _saveTimers.set(cfg._id, setTimeout(() => saveConfig(cfg), 700))
 }
+
+// 优惠环比：连续告警倍数(C) 必须大于普通告警倍数(B)（镜像风控优惠监控配置校验）
+const warnIfContNotGreater = (cfg) => {
+    if (Number(cfg.multLastCont) <= Number(cfg.multLast)) {
+        ElNotification.warning({
+            message: '连续告警阈值需大于普通告警的阈值（C 须 > B）',
+            position: 'bottom-right', duration: 4000,
+        })
+        return false
+    }
+    return true
+}
+const onMultLastChange = (cfg) => { warnIfContNotGreater(cfg); queueSaveCfg(cfg) }
+const onMultLastContChange = (cfg) => { warnIfContNotGreater(cfg); queueSaveCfg(cfg) }
+
+// 优惠同比：连续告警倍数(mult7Cont/mult30Cont) 必须大于对应的普通告警倍数(mult7/mult30)
+const warnIfYoyContNotGreater = (cfg) => {
+    if (Number(cfg.mult7Cont) <= Number(cfg.mult7) || Number(cfg.mult30Cont) <= Number(cfg.mult30)) {
+        ElNotification.warning({
+            message: '连续告警阈值需大于普通告警的阈值（连续倍数须 > 普通倍数）',
+            position: 'bottom-right', duration: 4000,
+        })
+        return false
+    }
+    return true
+}
+const onYoyMultChange = (cfg) => { warnIfYoyContNotGreater(cfg); queueSaveCfg(cfg) }
+const onYoyMultContChange = (cfg) => { warnIfYoyContNotGreater(cfg); queueSaveCfg(cfg) }
 
 onMounted(() => onTabChange(activeTab.value))
 
@@ -413,8 +529,8 @@ const addConfig = () => {
             tid === 8 ? { typeId: tid, name: value, xThreshold: 2500, yThreshold: 10, alertInterval: 60 }
           : tid === 9 ? { typeId: tid, name: value, alertInterval: 60, yThreshold: 0 }
           : tid === 10 ? { typeId: tid, name: value, xThreshold: 0, alertInterval: 60 }
-          : tid === 11 ? { typeId: tid, name: value, startThreshold: 0, mult7: 1.2, mult30: 1.2 }
-          : tid === 12 ? { typeId: tid, name: value, alertInterval: 30, multLast: 1.2 }
+          : tid === 11 ? { typeId: tid, name: value, promoName: '', startThreshold: 0, mult7: 1.2, mult30: 1.2, mult7Cont: 1.5, mult30Cont: 1.5, alertInterval: 30 }
+          : tid === 12 ? { typeId: tid, name: value, alertInterval: 30, multLast: 1.2, multLastCont: 1.5, promoName: '' }
           : { typeId: tid, name: value, durationMin: 30, multiUpper: 1.15, multiLower: 0.85, ratioLimit: 1.5, ratioMulti: 0.5, alertWindow: 30 }
         )
         const newCfg = { ...res.data, _isEditingName: false, _tempName: res.data.name, _saveState: 'idle', _savedAt: null }
@@ -442,6 +558,13 @@ const saveConfig = async (cfg) => {
             xThreshold:    cfg.xThreshold    ?? 2500,
             yThreshold:    cfg.yThreshold    ?? 10,
             alertInterval: cfg.alertInterval ?? 60,
+            // 优惠同比(11) / 优惠环比(12) 倍数（此前漏传，编辑后不落库）
+            startThreshold: cfg.startThreshold ?? 0,
+            mult7:          cfg.mult7          ?? 1.2,
+            mult30:         cfg.mult30         ?? 1.2,
+            multLast:       cfg.multLast       ?? 1.2,
+            multLastCont:   cfg.multLastCont   ?? 1.5,
+            promoName:      cfg.promoName      ?? '',
         }
         await axios.post(`${API}/configs`, payload)
         cfg._saveState = 'idle'

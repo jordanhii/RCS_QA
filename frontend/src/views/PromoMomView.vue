@@ -50,9 +50,11 @@
                     <div class="control-panel">
                         <div class="panel-left">
                             <span class="cfg-label">关联配置：</span>
-                            <el-select v-model="list.configId" size="small" style="width:180px;"
-                                placeholder="请选择配置" clearable @change="saveList(list, false)">
-                                <el-option v-for="c in availableConfigs" :key="c._id" :label="c.name" :value="c._id" />
+            <el-select v-model="list.configIds" size="small" style="min-width:240px;max-width:440px;"
+                                multiple collapse-tags collapse-tags-tooltip
+                                placeholder="可多选配置（各优惠类型自动匹配各自配置）" clearable @change="saveList(list, false)">
+                                <el-option v-for="c in availableConfigs" :key="c._id"
+                                    :label="c.promoName ? `${c.name}（${c.promoName}）` : c.name" :value="c._id" />
                                 <template v-if="availableConfigs.length === 0">
                                     <el-option disabled value="" label="暂无配置，请前往「告警配置」添加" />
                                 </template>
@@ -102,6 +104,24 @@
                                 </template>
                                 <span class="sync-cfg-hint">
                                     每 {{ globalQAConfig.syncIntervalMin }} 分钟 · 抓 {{ globalQAConfig.syncPageSize }} 条
+                                </span>
+                            </el-tooltip>
+                            <el-tooltip placement="top"
+                                :content="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime) ? '已在质检配置中设定，子页面不支持修改' : '只同步告警时间落在此范围内的数据，留空 = 不限制'">
+                                <span style="display:inline-block;">
+                                <el-date-picker
+                                    type="datetimerange"
+                                    range-separator="至"
+                                    start-placeholder="抓取起始" end-placeholder="抓取结束"
+                                    format="MM-DD HH:mm"
+                                    value-format="YYYY-MM-DD HH:mm:ss"
+                                    style="width:330px;" size="small" clearable
+                                    :disabled="!!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)"
+                                    :model-value="(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)
+                                        ? [globalQAConfig.syncStartTime, globalQAConfig.syncEndTime]
+                                        : ((list.syncStartTime && list.syncEndTime) ? [list.syncStartTime, list.syncEndTime] : null)"
+                                    @update:model-value="v => { if (!(globalQAConfig.syncStartTime || globalQAConfig.syncEndTime)) { list.syncStartTime = v?.[0] || null; list.syncEndTime = v?.[1] || null; saveList(list, false) } }"
+                                />
                                 </span>
                             </el-tooltip>
                             <el-divider direction="vertical" />
@@ -176,19 +196,19 @@
 
                     <!-- 统计栏 -->
                     <div v-if="list.records && list.records.length > 0" class="stats-bar"
-                        :class="{ 'has-fail': getMatchCount(list.records, getCfg(list)).fail > 0 }">
+                        :class="{ 'has-fail': getMatchCount(list.records, row => getCfgForRow(list, row)).fail > 0 }">
                         <span class="stat-item">共 <b>{{ list.records.length }}</b> 条记录</span>
                         <el-divider direction="vertical" />
                         <span class="stat-item stat-pass">
-                            <el-icon><CircleCheck /></el-icon>&nbsp;逻辑一致：<b>{{ getMatchCount(list.records, getCfg(list)).pass }}</b>
+                            <el-icon><CircleCheck /></el-icon>&nbsp;逻辑一致：<b>{{ getMatchCount(list.records, row => getCfgForRow(list, row)).pass }}</b>
                         </span>
                         <el-divider direction="vertical" />
-                        <span class="stat-item" :class="getMatchCount(list.records, getCfg(list)).fail > 0 ? 'stat-fail' : 'stat-ok'">
-                            <el-icon><CircleClose /></el-icon>&nbsp;逻辑异常：<b>{{ getMatchCount(list.records, getCfg(list)).fail }}</b>
+                        <span class="stat-item" :class="getMatchCount(list.records, row => getCfgForRow(list, row)).fail > 0 ? 'stat-fail' : 'stat-ok'">
+                            <el-icon><CircleClose /></el-icon>&nbsp;逻辑异常：<b>{{ getMatchCount(list.records, row => getCfgForRow(list, row)).fail }}</b>
                         </span>
-                        <el-tag v-if="getMatchCount(list.records, getCfg(list)).fail > 0"
+                        <el-tag v-if="getMatchCount(list.records, row => getCfgForRow(list, row)).fail > 0"
                             type="danger" effect="dark" size="small" style="margin-left:10px;">
-                            ⚠ {{ getMatchCount(list.records, getCfg(list)).fail }} 条异常，请检查高亮行
+                            ⚠ {{ getMatchCount(list.records, row => getCfgForRow(list, row)).fail }} 条异常，请检查高亮行
                         </el-tag>
                         <el-tag v-else-if="list.records.filter(r => r.devResult && !r.ignored).length > 0"
                             type="success" effect="dark" size="small" style="margin-left:10px;">
@@ -205,9 +225,11 @@
                                 </el-button>
                                 <template #dropdown>
                                     <el-dropdown-menu>
-                                        <el-dropdown-item @click="bulkIgnore(list)">忽略选中</el-dropdown-item>
-                                        <el-dropdown-item @click="bulkRestore(list)">恢复选中</el-dropdown-item>
-                                        <el-dropdown-item divided @click="bulkDelete(list)">删除选中</el-dropdown-item>
+                                        <el-dropdown-item @click="allIgnore(list)">忽略全部</el-dropdown-item>
+                                        <el-dropdown-item @click="allRestore(list)">恢复全部</el-dropdown-item>
+                                        <el-dropdown-item divided @click="allDelete(list)">
+                                            <span style="color:#F56C6C;">删除全部</span>
+                                        </el-dropdown-item>
                                     </el-dropdown-menu>
                                 </template>
                             </el-dropdown>
@@ -221,8 +243,8 @@
                             </template>
                         </div>
                         <div class="action-bar-right">
-                            <!-- 优惠类型筛选（仅过滤展示行，逻辑仍按完整 records 的绝对索引计算） -->
-                            <span class="filter-label">优惠类型：</span>
+                            <!-- 优惠名称筛选（仅过滤展示行，逻辑仍按完整 records 的绝对索引计算） -->
+                            <span class="filter-label">优惠名称：</span>
                             <el-select
                                 v-model="list._rewardTypeFilter"
                                 size="small"
@@ -265,7 +287,7 @@
                     <el-table :data="getPagedRecords(list)"
                         border size="small" style="width:100%;margin-top:8px;"
                         :row-key="(row) => row.alertId || list.records.indexOf(row)"
-                        :row-class-name="({ row }) => getRowClass(list.records.indexOf(row), list.records, getCfg(list))"
+                        :row-class-name="({ row }) => getRowClass(list.records.indexOf(row), list.records, getCfgForRow(list, row))"
                         @selection-change="rows => list._selectedRows = rows">
 
                         <el-table-column type="selection" width="40" fixed="left" reserve-selection />
@@ -289,8 +311,8 @@
                             </template>
                         </el-table-column>
 
-                        <!-- 3. 优惠类型 -->
-                        <el-table-column label="优惠类型" min-width="180">
+                        <!-- 3. 优惠名称 -->
+                        <el-table-column label="优惠名称" min-width="180">
                             <template #default="{ row }">
                                 <el-input v-model="row.rewardType" size="small"
                                     style="font-size:12px;" placeholder="ALL / 活动名" />
@@ -313,7 +335,7 @@
                             </template>
                         </el-table-column>
 
-                        <!-- 6. 上时段增长×倍数 -->
+                        <!-- 6. 上时段增长（原始，倍数由配置乘） -->
                         <el-table-column label="上时段增长" width="135">
                             <template #default="{ row }">
                                 <el-input-number v-model="row.lastGrowth" size="small"
@@ -321,33 +343,63 @@
                             </template>
                         </el-table-column>
 
-                        <!-- 7. 今日第N个告警 -->
-                        <el-table-column label="今日第N个告警" width="120">
-                            <template #default="{ row }">
-                                <el-input-number v-model="row.alertSeq" size="small"
-                                    :controls="false" style="width:100%;" placeholder="未抓到" />
-                            </template>
-                        </el-table-column>
-
-                        <!-- 8. 告警结果 -->
-                        <el-table-column width="135" align="center">
+                        <!-- 7. 今日第N个告警（RCS_QA 计算，只读：同日同优惠类型按时间从旧到新计数） -->
+                        <el-table-column width="120" align="center">
                             <template #header>
                                 <el-tooltip placement="top">
-                                    <template #content>本时段增长 ≥ 上时段增长×倍数 → TRUE；缺对比阈值（如0点首段）→ 数据不足</template>
-                                    <span class="tip-header">告警结果&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
+                                    <template #content>由 RCS_QA 计算：同一天、同一优惠类型，按告警时间从旧到新排第几个（非抓取）</template>
+                                    <span class="tip-header">今日第N个告警&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
                                 </el-tooltip>
                             </template>
                             <template #default="{ row }">
-                                <template v-if="calcNormalResult(list.records.indexOf(row), list.records, getCfg(list)) === null">
+                                <span>{{ calcAlertSeq(list.records.indexOf(row), list.records) ?? '—' }}</span>
+                            </template>
+                        </el-table-column>
+
+                        <!-- 8. 普通告警结果 -->
+                        <el-table-column width="120" align="center">
+                            <template #header>
+                                <el-tooltip placement="top">
+                                    <template #content>
+                                        <div style="line-height:1.8;">
+                                            <div>本时段增长 ≥ 上时段增长 × 普通告警倍数(B) → <b>TRUE</b></div>
+                                            <div style="color:#bbb;margin-top:4px;font-size:12px;">缺对比阈值（如0点首段）→ 数据不足</div>
+                                        </div>
+                                    </template>
+                                    <span class="tip-header">普通告警结果&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
+                                </el-tooltip>
+                            </template>
+                            <template #default="{ row }">
+                                <template v-if="calcNormalResult(list.records.indexOf(row), list.records, getCfgForRow(list, row)) === null">
                                     <span class="field-missing">⚠ 数据不足/未抓到</span>
                                 </template>
-                                <el-tag v-else :type="calcNormalResult(list.records.indexOf(row), list.records, getCfg(list)) === 'TRUE' ? 'success' : 'danger'" size="small">
-                                    {{ calcNormalResult(list.records.indexOf(row), list.records, getCfg(list)) }}
+                                <el-tag v-else :type="calcNormalResult(list.records.indexOf(row), list.records, getCfgForRow(list, row)) === 'TRUE' ? 'success' : 'danger'" size="small">
+                                    {{ calcNormalResult(list.records.indexOf(row), list.records, getCfgForRow(list, row)) }}
                                 </el-tag>
                             </template>
                         </el-table-column>
 
-                        <!-- 9. 风控系统判断（只读，来自同步/导入的 RC 判断） -->
+                        <!-- 9. 连续告警结果 -->
+                        <el-table-column width="120" align="center">
+                            <template #header>
+                                <el-tooltip placement="top">
+                                    <template #content>
+                                        <div style="line-height:1.8;">
+                                            <div>触发告警后、同周期(A 分钟)内再次<br />本时段增长 ≥ 上时段增长 × 连续告警倍数(C) → <b>TRUE</b></div>
+                                            <div style="color:#bbb;margin-top:4px;font-size:12px;">与同类型上一告警间隔 ≥ A 分钟（非连续）→ 显示 -</div>
+                                        </div>
+                                    </template>
+                                    <span class="tip-header">连续告警结果&nbsp;<el-icon size="11"><InfoFilled /></el-icon></span>
+                                </el-tooltip>
+                            </template>
+                            <template #default="{ row }">
+                                <b :style="{ color: getContResultColor(calcContResult(list.records.indexOf(row), list.records, getCfgForRow(list, row))) }">
+                                    {{ calcContResult(list.records.indexOf(row), list.records, getCfgForRow(list, row)) }}
+                                </b>
+                            </template>
+                        </el-table-column>
+
+                        <!-- 10. 风控系统判断（只读，来自同步/导入的 RC 判断） -->
                         <el-table-column label="风控系统判断" width="115" align="center">
                             <template #default="{ row }">
                                 <el-tag v-if="row.devResult"
@@ -359,19 +411,19 @@
                             </template>
                         </el-table-column>
 
-                        <!-- 10. 逻辑一致 -->
+                        <!-- 11. 逻辑一致 -->
                         <el-table-column label="逻辑一致" width="90" align="center">
                             <template #default="{ row }">
                                 <el-tag v-if="row.ignored" type="info" size="small">—</el-tag>
                                 <template v-else-if="row.devResult">
-                                    <el-tag v-if="calcLogicMatch(list.records.indexOf(row), list.records, getCfg(list))" type="success" size="small">✓ 一致</el-tag>
+                                    <el-tag v-if="calcLogicMatch(list.records.indexOf(row), list.records, getCfgForRow(list, row))" type="success" size="small">✓ 一致</el-tag>
                                     <el-tag v-else type="danger" size="small">✗ 异常</el-tag>
                                 </template>
                                 <el-tag v-else type="info" size="small">待判断</el-tag>
                             </template>
                         </el-table-column>
 
-                        <!-- 11. 操作 -->
+                        <!-- 12. 操作 -->
                         <el-table-column label="操作" width="112" align="center" fixed="right">
                             <template #default="{ row }">
                                 <el-button size="small" link
@@ -418,8 +470,8 @@ import { useSyncManager } from '../composables/useSyncManager.js'
 import { useAppStore } from '../stores/appStore.js'
 import { PAGE_TITLES } from '../logic/alertTypes.js'
 import {
-    calcNormalResult, calcLogicMatch,
-    getRowClass, getMatchCount
+    calcNormalResult, calcContResult, calcLogicMatch, calcAlertSeq,
+    getRowClass, getMatchCount, getContResultColor
 } from '../logic/promoMomLogic.js'
 
 const API       = 'http://localhost:3000/api'
@@ -431,7 +483,7 @@ const ALERT_TYPE = 'reward-interval'
 const appStore = useAppStore()
 
 // ── QA 全局配置 ────────────────────────────────────────────────────────────────
-const globalQAConfig = ref({ syncIntervalMin: 1, syncPageSize: 200 })
+const globalQAConfig = ref({ syncIntervalMin: 1, syncPageSize: 200, syncStartTime: null, syncEndTime: null })
 const loadQAConfig = async () => {
     try { const { data } = await axios.get(`${API}/qa-config`); globalQAConfig.value = data } catch {}
 }
@@ -448,7 +500,25 @@ const loadAvailableConfigs = async () => {
     try { const { data } = await axios.get(`${API}/configs/${TYPE_ID}`); availableConfigs.value = data } catch {}
 }
 
-const getCfg = list => availableConfigs.value.find(c => c._id === list.configId) || null
+// 列表关联的配置集合（支持多选 configIds；兼容旧的单值 configId）
+const listCfgs = list => {
+    const ids = (list.configIds && list.configIds.length) ? list.configIds : (list.configId ? [list.configId] : [])
+    return ids.map(id => availableConfigs.value.find(c => c._id === id)).filter(Boolean)
+}
+const getCfg = list => listCfgs(list)[0] || null
+
+// 配置的「优惠类型」支持多个名称（逗号分隔）：行的优惠类型命中其中任一即用该配置（大小写不敏感）。
+// 仅在「本列表关联的配置」内匹配，确保按环境隔离（不会误用其它环境的同类型配置）。
+const cfgPromoNames = c => String(c?.promoName ?? '').split(/[,，]/).map(s => s.trim()).filter(Boolean)
+const getCfgForRow = (list, row) => {
+    const name = String(row?.rewardType ?? '').trim().toLowerCase()
+    const cfgs = listCfgs(list)
+    if (name) {
+        const byName = cfgs.find(c => cfgPromoNames(c).some(n => n.toLowerCase() === name))
+        if (byName) return byName
+    }
+    return cfgs[0] || null
+}
 
 // ── 同步状态 ──────────────────────────────────────────────────────────────────
 const globalSyncStatus = ref({ isAlive: false })
@@ -468,7 +538,18 @@ const {
 } = useSyncManager({
     getCacheUrl: list =>
         `${API}/sync-cache/${TYPE_ID}?url=${encodeURIComponent(list.rcBaseUrl || '')}`,
-    filterRecords: raw => raw,
+    // 只同步「告警时间落在抓取时间范围内」的记录：优先用质检全局配置，其次用本列表设置；起/止可留空 = 该端不限制
+    filterRecords: (raw, list) => {
+        const s = globalQAConfig.value?.syncStartTime || list?.syncStartTime
+        const e = globalQAConfig.value?.syncEndTime   || list?.syncEndTime
+        if (!s && !e) return raw
+        const sMs = s ? new Date(s).getTime() : -Infinity
+        const eMs = e ? new Date(e).getTime() :  Infinity
+        return raw.filter(r => {
+            const t = new Date(r.alertTime).getTime()
+            return !isNaN(t) && t >= sMs && t <= eMs
+        })
+    },
     mapRecord: item => ({
         alertId:             String(item.alertId  || ''),
         alertTime:           String(item.alertTime || ''),
@@ -476,7 +557,7 @@ const {
         todayTotal:          toNum(item.todayTotal),
         currentGrowth:       toNum(item.currentGrowth),
         lastGrowth: toNum(item.lastGrowth),
-        alertSeq:            toNum(item.alertSeq),
+        // alertSeq（今日第N个告警）由 RCS_QA 计算，不再抓取/存储
         devResult:           item.devResult || '',
         ignored:             false,
     }),
@@ -566,16 +647,50 @@ const bulkRestore = list => {
 }
 const bulkDelete = async list => {
     if (!list._selectedRows.length) return
+    // 快照选中项：await 期间表格会清空 _selectedRows，必须先固定引用，否则只删零星几条
+    const selectedRows = [...list._selectedRows]
     try {
         await ElMessageBox.confirm(
-            `确认删除选中的 ${list._selectedRows.length} 条记录？`,
+            `确认删除选中的 ${selectedRows.length} 条记录？`,
             '批量删除', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
         )
-        const sel = new Set(list._selectedRows)
+        const sel = new Set(selectedRows)
         list.records = list.records.filter(r => !sel.has(r))
         list._selectedRows = []
         const maxPage = Math.max(1, Math.ceil(list.records.length / list._pageSize))
         if (list._currentPage > maxPage) list._currentPage = maxPage
+        await saveList(list, false)
+    } catch { /* cancelled */ }
+}
+
+// ── 一键全部操作 ──────────────────────────────────────────────────────────────
+const allIgnore = async list => {
+    try {
+        await ElMessageBox.confirm(`确认忽略全部 ${list.records.length} 条记录？`, '一键忽略', {
+            type: 'warning', confirmButtonText: '忽略全部', cancelButtonText: '取消'
+        })
+        list.records.forEach(r => { r.ignored = true })
+    } catch { /* cancelled */ }
+}
+const allRestore = async list => {
+    try {
+        await ElMessageBox.confirm(`确认恢复全部 ${list.records.length} 条记录？`, '一键恢复', {
+            type: 'info', confirmButtonText: '恢复全部', cancelButtonText: '取消'
+        })
+        list.records.forEach(r => { r.ignored = false })
+    } catch { /* cancelled */ }
+}
+const allDelete = async list => {
+    try {
+        await ElMessageBox.confirm(`确认删除全部 ${list.records.length} 条记录？此操作不可撤销。`, '一键删除', {
+            type: 'warning', confirmButtonText: '删除全部', cancelButtonText: '取消',
+            confirmButtonClass: 'el-button--danger'
+        })
+        list.records = []
+        list._selectedRows = []
+        list._currentPage = 1
+        await saveList(list, false)
+        ElNotification.success({ message: '全部记录已删除', position: 'bottom-right' })
     } catch { /* cancelled */ }
 }
 
@@ -586,6 +701,8 @@ const fetchLists = async () => {
         const { data } = await axios.get(`${API}/test-lists/${TYPE_ID}`)
         allLists.value = data.map(l => ({
             ...l,
+            // 兼容旧数据：把单值 configId 迁移成 configIds 数组
+            configIds:      (l.configIds && l.configIds.length) ? l.configIds : (l.configId ? [l.configId] : []),
             _isEditingName: false,
             _tempName:      l.listName,
             _isSaving:      false,
@@ -614,12 +731,15 @@ const saveList = async (list) => {
     list._saveState = 'saving'
     try {
         await axios.post(`${API}/test-lists`, {
-            _id:       list._id,
-            typeId:    TYPE_ID,
-            listName:  list.listName,
-            configId:  list.configId || null,
-            rcBaseUrl: list.rcBaseUrl || '',
-            records:   list.records,
+            _id:           list._id,
+            typeId:        TYPE_ID,
+            listName:      list.listName,
+            configIds:     list.configIds || [],
+            configId:      (list.configIds && list.configIds[0]) || list.configId || null,  // 兼容旧字段
+            rcBaseUrl:     list.rcBaseUrl || '',
+            syncStartTime: list.syncStartTime || null,
+            syncEndTime:   list.syncEndTime || null,
+            records:       list.records,
         })
         list._saveState = 'idle'
         list._savedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -641,7 +761,7 @@ const attachAutoSave = (list) => {
     if (list._autosaveOn) return
     list._autosaveOn = true
     watch(
-        () => [list.records, list.configId, list.rcBaseUrl, list.syncStartTime],
+        () => [list.records, list.configIds, list.configId, list.rcBaseUrl, list.syncStartTime, list.syncEndTime],
         () => queueSave(list),
         { deep: true }
     )
@@ -659,6 +779,7 @@ const createNewList = async () => {
         })
         allLists.value.unshift({
             ...data,
+            configIds: (data.configIds && data.configIds.length) ? data.configIds : (data.configId ? [data.configId] : []),
             _isEditingName: false, _tempName: data.listName,
             _isSaving: false, _saveState: 'idle', _savedAt: null,
             _syncEnabled: false, _isSyncingNow: false,
@@ -705,7 +826,7 @@ const handleImport = (file, list) => {
                     todayTotal:          toNum(r.todayTotal          ?? r['meta.todayTotal']),
                     currentGrowth:       toNum(r.currentGrowth       ?? r['meta.currentGrowth']),
                     lastGrowth: toNum(r.lastGrowth ?? r['meta.lastGrowth']),
-                    alertSeq:            toNum(r.alertSeq            ?? r['meta.alertSeq']),
+                    // alertSeq（今日第N个告警）由 RCS_QA 计算，不再从 Excel 取
                     devResult:           String(r.alertNumber || '').trim() ? 'TRUE' : '',
                     ignored:             false,
                 }))
@@ -734,7 +855,7 @@ const handleImport = (file, list) => {
 const addRow = list => {
     list.records.unshift({
         alertId: '', alertTime: '', rewardType: '',
-        todayTotal: 0, currentGrowth: 0, lastGrowth: 0, alertSeq: 0,
+        todayTotal: 0, currentGrowth: 0, lastGrowth: 0,
         devResult: '', ignored: false,
     })
     list._currentPage = 1

@@ -15,6 +15,7 @@ const cfgToJson = cfg => ({
     syncIntervalMin: cfg.syncIntervalMin,
     syncPageSize:    cfg.syncPageSize,
     syncStartTime:   cfg.syncStartTime ?? null,
+    syncEndTime:     cfg.syncEndTime ?? null,
     rcBaseUrl:       cfg.rcBaseUrl,
     rcEnvs:          cfg.rcEnvs || [],
 })
@@ -25,11 +26,12 @@ router.get('/', ah(async (_req, res) => {
 }))
 
 router.post('/', ah(async (req, res) => {
-    const { syncIntervalMin, syncPageSize, syncStartTime, rcBaseUrl, rcEnvs } = req.body
+    const { syncIntervalMin, syncPageSize, syncStartTime, syncEndTime, rcBaseUrl, rcEnvs } = req.body
     const update = {}
     if (syncIntervalMin != null) update.syncIntervalMin = syncIntervalMin
     if (syncPageSize    != null) update.syncPageSize    = syncPageSize
     if ('syncStartTime' in req.body) update.syncStartTime = syncStartTime || null
+    if ('syncEndTime'   in req.body) update.syncEndTime   = syncEndTime || null
     if (rcBaseUrl       != null) update.rcBaseUrl       = rcBaseUrl
     if (rcEnvs          != null) update.rcEnvs          = rcEnvs
     const cfg = await QAConfig.findOneAndUpdate({ singleton: 'default' }, update, { upsert: true, new: true })

@@ -41,6 +41,28 @@ export const TYPE_DISPLAY_NAMES = {
     12: '优惠环比'
 }
 
+/** 优惠类型可选项（优惠同比/环比配置的「优惠类型」下拉，与风控总览-优惠的类型一致） */
+export const REWARD_TYPE_OPTIONS = [
+    'All',
+    'PlayerLevelUp',
+    'PlayerLevelMaintain',
+    'PlayerPromoCodeReward',
+    'PlayerFreeTrialRewardGroup',
+    'FreeBonus',
+    'LuckyCoins',
+    'BonusRecord',
+    'DiamondExchange',
+    'LeaderboardReward',
+    'MudToCash',
+    'SuperJackpotRecord',
+    'AngPao Rain',
+    'Flip Coin',
+    'Mud',
+    'Palayok Blast',
+    'Milyonaryo Jackpot',
+    'Lucky Hour Bonus',
+]
+
 /** Dropdown options for the continuous alert type selector */
 export const CONT_TYPE_OPTIONS = [
     '前30分钟无告警',
@@ -62,7 +84,8 @@ export function getVal1Label(typeId) {
 export function getVal2Label(typeId) {
     if (typeId === 1 || typeId === 3) return '近 X 天平均金额'
     if (typeId === 2 || typeId === 4) return '前 X 月平均金额'
-    if (typeId === 5 || typeId === 6) return '存款金额'
+    if (typeId === 5) return '存款金额*阈值'
+    if (typeId === 6) return '存款金额*阈值'
     return '存款+优惠金额'
 }
 

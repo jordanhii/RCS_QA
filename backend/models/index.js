@@ -18,9 +18,13 @@ const ConfigSchema = new mongoose.Schema({
     alertInterval:{ type: Number, default: 60 },
     // ── 优惠同比 (typeId 11) / 优惠环比 (typeId 12) 配置参数（镜像风控优惠监控配置）──
     startThreshold:{ type: Number, default: 0 },    // 同比：日累计优惠起步判断额
-    mult7:         { type: Number, default: 1.2 },  // 同比：≥前7天平均 × 倍数
-    mult30:        { type: Number, default: 1.2 },  // 同比：≥前30天平均 × 倍数
-    multLast:      { type: Number, default: 1.2 },  // 环比：≥上时段 × 倍数
+    mult7:         { type: Number, default: 1.2 },  // 同比普通：≥前7天平均 × 倍数
+    mult30:        { type: Number, default: 1.2 },  // 同比普通：≥前30天平均 × 倍数
+    mult7Cont:     { type: Number, default: 1.5 },  // 同比连续：≥前7天平均 × 倍数(须 > mult7)
+    mult30Cont:    { type: Number, default: 1.5 },  // 同比连续：≥前30天平均 × 倍数(须 > mult30)
+    multLast:      { type: Number, default: 1.2 },  // 环比：普通告警 ≥上时段增长 × 倍数(B)
+    multLastCont:  { type: Number, default: 1.5 },  // 环比：连续告警 ≥上时段增长 × 倍数(C，须 > B)
+    promoName:     { type: String, default: '' },   // 同比/环比：该配置适用的优惠类型（与告警优惠类型一致，如 ALL / Mud）
 }, SCHEMA_OPTS)
 
 // 同一 typeId 下配置名唯一（稀疏索引允许 name 为空）
@@ -32,9 +36,11 @@ const MAX_RECORDS = 5000   // 单列表最大记录数，防止单文档超 16 M
 const TestListSchema = new mongoose.Schema({
     typeId:        { type: Number, index: true },
     listName:      { type: String, trim: true },
-    configId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Config' },
+    configId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Config' },                  // 兼容旧数据：单关联配置
+    configIds:     [{ type: mongoose.Schema.Types.ObjectId, ref: 'Config' }],                 // 可关联多条配置（优惠同比/环比：按优惠类型各用各自配置）
     rcBaseUrl:     { type: String, default: '' },
     syncStartTime: { type: String, default: null },  // 列表级同步起始时间（为 null 则用全局配置）
+    syncEndTime:   { type: String, default: null },  // 列表级同步结束时间（与起始时间组成抓取时间范围，null = 不限制）
     records: [{
         alertId:    String,
         alertTime:  String,
@@ -80,6 +86,7 @@ const GameProfitListSchema = new mongoose.Schema({
     configId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Config', default: null },
     ignoreC2:      { type: Boolean, default: false },
     syncStartTime: { type: String, default: null },  // 列表级同步起始时间
+    syncEndTime:   { type: String, default: null },  // 列表级同步结束时间（与起始时间组成抓取时间范围）
     records: [{
         alertId:         String,
         alertTime:       String,
@@ -110,7 +117,8 @@ const QAConfigSchema = new mongoose.Schema({
     singleton:       { type: String, default: 'default', unique: true },
     syncIntervalMin: { type: Number, default: 1 },
     syncPageSize:    { type: Number, default: 200 },
-    syncStartTime:   { type: String, default: null },  // 同步起始时间过滤，null = 不过滤
+    syncStartTime:   { type: String, default: null },  // 同步抓取时间范围-起始，null = 不限制
+    syncEndTime:     { type: String, default: null },  // 同步抓取时间范围-结束，null = 不限制
     rcBaseUrl:       { type: String, default: 'https://rc-client.platform88.me' },
     rcEnvs: {
         type: [{
