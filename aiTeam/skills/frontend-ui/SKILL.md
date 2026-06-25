@@ -7,11 +7,25 @@ description: Use when modifying Vue views, Element Plus UI, router behavior, Pin
 
 ## Read First
 
+- **`frontend/DESIGN.md` — 设计规范（Design System）。任何页面布局/样式改动前必读，按它来，不要自创布局。**
 - `frontend/src/router.js`
 - relevant file under `frontend/src/views/`
 - `frontend/src/stores/appStore.js` if QA config or RC environments are involved
 - `frontend/src/composables/useSyncManager.js` if sync state is involved
 - relevant logic file under `frontend/src/logic/`
+
+## 设计规范要点（细节见 `frontend/DESIGN.md`，冲突以 DESIGN.md 为准）
+
+- **页面骨架**：`page-header(title 20px/700 + subtitle 13px)` → `.section-label`（分组标题，在卡片**外**、带主色竖条 `#409EFF`）→ `.config-panel`（白卡 12px 圆角、`#ebeef5` 边、`--qa-shadow-xs`）。几个分组 = 几对 label+card。用 Tab 时，Tab 内部仍按 label+card 分组，不要塞进一张大卡用小标题分段。
+- **说明用 hover**：`.section-label` 右侧放淡灰 `QuestionFilled` + `el-tooltip`，不要常驻大说明框。
+- **控件不要拉满整行**：固定合适宽度、靠左；表单内容整体限宽（~720–960px），避免被横向撑长。
+- **按钮**：主操作 `type="primary"`（实心、默认尺寸，不要 `plain`/`small`）；危险操作 `type="danger" plain`；图标+文字。全站统一。
+- **已保存状态** `.save-status`：放卡片**右上角**。
+- **编辑态**：配置类页面默认只读，右下角「编辑」→「完成」开关，切换上下文自动退回只读。
+- **选择项网格**（如批量开关）：多列小卡片（`#fafbfc` 底、`#ebeef5` 边、10px 圆角、hover/选中高亮），不要无边框挤行。
+- 三个配置页（告警/接口/质检）是当前最贴合规范的范本，改新页面先参考它们。
+- **告警逻辑检查列表页共用 `src/components/AlertListShell.vue`**（优惠同比/环比、游戏盈利、存提差同比已用；TestView typeId 1–9 仍独立但保持一致）。改这类页面的外观/通用行为 → 改外壳一处全生效；各页只用 props + slots（`#config`/`#columns`/`#filters`）提供差异。详见 DESIGN.md §5。
+- 列表页约定：结果列统一 el-tag（连续告警结果也是，不用彩色纯文字，N/A 显示灰「—」）；金额输入框加 `amtFormat/amtParse` 千分位；同步时间用「开始/结束」两栏（结束留空=最新）；表格支持 Shift 框选 + 「只看异常」，不放每行操作列；路由用可读 slug（见 `TEST_SLUG_TO_TYPEID`）。
 
 ## Workflow
 

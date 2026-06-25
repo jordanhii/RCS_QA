@@ -13,6 +13,18 @@ export const ALERT_TYPE_MAP = {
     12: 'reward-interval',
 }
 
+/** 可读的路由 slug → typeId（让 URL 不再是 /test/9 这种数字）。数字旧路由仍兼容。 */
+export const TEST_SLUG_TO_TYPEID = {
+    'deposit-daily':      1,
+    'deposit-monthly':    2,
+    'withdraw-daily':     3,
+    'withdraw-monthly':   4,
+    'netflow-24h':        5,
+    'bet-deposit':        6,
+    'bet-deposit-promo':  7,
+    'netflow-comp':       9,
+}
+
 /** Full page titles shown in the sidebar and page header */
 export const PAGE_TITLES = {
     1: '前X分钟存款(天)',

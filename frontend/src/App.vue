@@ -48,33 +48,41 @@
                     </template>
 
                     <div class="menu-group-label">存提款</div>
-                    <el-menu-item index="/test/1">
+                    <el-menu-item index="/test/deposit-daily">
                         <el-icon><Top /></el-icon>
                         <span>存款（天）</span>
                     </el-menu-item>
-                    <el-menu-item index="/test/2">
+                    <el-menu-item index="/test/deposit-monthly">
                         <el-icon><Top /></el-icon>
                         <span>存款（月）</span>
                     </el-menu-item>
-                    <el-menu-item index="/test/3">
+                    <el-menu-item index="/test/withdraw-daily">
                         <el-icon><Bottom /></el-icon>
                         <span>提款（天）</span>
                     </el-menu-item>
-                    <el-menu-item index="/test/4">
+                    <el-menu-item index="/test/withdraw-monthly">
                         <el-icon><Bottom /></el-icon>
                         <span>提款（月）</span>
                     </el-menu-item>
-                    <el-menu-item index="/test/5">
+                    <el-menu-item index="/test/netflow-24h">
                         <el-icon><DataLine /></el-icon>
                         <span>24h 存提款额</span>
                     </el-menu-item>
+                    <el-menu-item index="/test/netflow-comp">
+                        <el-icon><Odometer /></el-icon>
+                        <span>存提差环比</span>
+                    </el-menu-item>
+                    <el-menu-item index="/test/netflow-hist">
+                        <el-icon><Rank /></el-icon>
+                        <span>存提差同比</span>
+                    </el-menu-item>
 
                     <div class="menu-group-label">投/存比</div>
-                    <el-menu-item index="/test/6">
+                    <el-menu-item index="/test/bet-deposit">
                         <el-icon><Histogram /></el-icon>
                         <span>投/存比</span>
                     </el-menu-item>
-                    <el-menu-item index="/test/7">
+                    <el-menu-item index="/test/bet-deposit-promo">
                         <el-icon><Histogram /></el-icon>
                         <span>投/存+惠比</span>
                     </el-menu-item>
@@ -89,18 +97,10 @@
                         <span>优惠环比</span>
                     </el-menu-item>
 
-                    <div class="menu-group-label">特殊告警</div>
+                    <div class="menu-group-label">游戏告警</div>
                     <el-menu-item index="/test/game-profit">
                         <el-icon><Trophy /></el-icon>
                         <span>游戏盈利 (CG)</span>
-                    </el-menu-item>
-                    <el-menu-item index="/test/9">
-                        <el-icon><Odometer /></el-icon>
-                        <span>存提差环比</span>
-                    </el-menu-item>
-                    <el-menu-item index="/test/netflow-hist">
-                        <el-icon><Rank /></el-icon>
-                        <span>存提差同比</span>
                     </el-menu-item>
                 </el-sub-menu>
             </el-menu>

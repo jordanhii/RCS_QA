@@ -25,6 +25,32 @@ Before changing an alert workflow, inspect:
 Alert calculation work should also load `aiTeam/skills/alert-logic/SKILL.md`.
 Schema/default/persistence work should load `aiTeam/skills/data-model/SKILL.md`.
 
+## 优惠告警（typeId 11 同比 / 12 环比）— 算法与配置
+
+数据来自 RC `/rewardAlerts` 的 `alertContent`（`\n` 分隔 8 段），后端 `formatRewardRecord` 按段解析；前端 `promoYoyLogic.js` / `promoMomLogic.js` 计算。
+
+**优惠同比（11，reward-cumulative）：**
+- 条件1（起步）：日累计 ≥ 起步判断额 才开始判断。
+- 条件2（普通）：日累计 ≥ 前7天平均×倍数 且 ≥ 前30天平均×倍数 → 告警；**同比当日只触发一次**（当天已有更早普通告警则普通判 FALSE，金额够也不行）；过往无数据不触发。
+- 条件3（连续）：首次触发后隔 X 分钟再查，恶化到 日累计 ≥ 前7/前30平均×连续倍数 → 再告警。
+- ⚠️ 同步解析坑：`avg7`/`avg30` 段存的是「平均×RC倍数」即阈值，要 `rewardRawLast(threshold, mult)`（÷倍数）还原原始平均，否则配置倍数被二次放大（见 `backend/routes/syncCache.js`）。
+
+**优惠环比（12，reward-interval）：**
+- 本期增长 = 累计(T) − 累计(T−X分)；上期增长 = 累计(T−X) − 累计(T−2X)。
+- 普通：本期 ≥ 上期×B(普通倍数)；连续：本期 ≥ 上期×C(连续倍数，周期内)。
+- `上期=0` 合法（前一窗口持平），`0×倍数` 仍可能触发——不是 bug。
+- 上期增长**不是**「上一条告警的本期增长」；每分钟独立按窗口算。
+
+**按优惠类型独立配置：**
+- `优惠类型`（promoName）支持配多个名称（逗号分隔），下拉项见 `alertTypes.js` 的 `REWARD_TYPE_OPTIONS`，匹配**大小写不敏感**。
+- 一个检查列表可关联**多个配置**（`configIds`），每行按其优惠类型自动解析到对应配置。
+
+## 新增/演进字段（近期）
+
+- `Config.mult7Cont` / `Config.mult30Cont`：连续告警的前7/前30天倍数（默认 1.5）。
+- `TestList.configIds`（[ObjectId]）：列表可关联多个告警配置（取代单一 `configId`，前端 `fetchLists` 会把旧 `configId` 迁移进 `configIds`）。
+- `syncStartTime` + `syncEndTime`：同步「抓取时间范围」（起+止），取代旧的单一起始时间；`TestList` / `GameProfitList` / `QAConfig` 均有。
+
 ## Record Semantics
 
 - `alertId` is the main identity for deduplication in frontend sync flows.
