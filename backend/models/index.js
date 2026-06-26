@@ -149,9 +149,21 @@ SyncCacheSchema.index({ updatedAt: 1 }, {
     // 真正的过期清理通过 persistCacheToDb 写入时间戳控制
 })
 
+// ── 用户（登录系统）────────────────────────────────────────────────────────
+const UserSchema = new mongoose.Schema({
+    username:     { type: String, required: true, unique: true, index: true, trim: true },
+    passwordHash: { type: String, required: true },
+    role:         { type: String, enum: ['admin', 'user'], default: 'user' },
+    // Google Authenticator (TOTP)：首次登录自助扫码绑定后写入
+    otpSecret:    { type: String, default: null },
+    otpEnabled:   { type: Boolean, default: false },
+    createdAt:    { type: Date, default: Date.now },
+}, { versionKey: false })
+
 export const Config         = mongoose.model('Config',         ConfigSchema)
 export const TestList       = mongoose.model('TestList',       TestListSchema)
 export const GameProfitList = mongoose.model('GameProfitList', GameProfitListSchema)
 export const CaptureConfig  = mongoose.model('CaptureConfig',  CaptureConfigSchema)
 export const QAConfig       = mongoose.model('QAConfig',       QAConfigSchema)
 export const SyncCacheDoc   = mongoose.model('SyncCache',      SyncCacheSchema)
+export const User           = mongoose.model('User',           UserSchema)

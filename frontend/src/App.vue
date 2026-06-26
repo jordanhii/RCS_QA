@@ -1,5 +1,9 @@
 <template>
-    <el-container style="height: 100vh;">
+    <!-- 公开页（登录）：全屏、无侧栏 -->
+    <router-view v-if="$route.meta.public" />
+
+    <!-- 应用主框架 -->
+    <el-container v-else style="height: 100vh;">
         <el-aside width="220px" style="background: linear-gradient(180deg, #1a2535 0%, #243447 100%); box-shadow: 2px 0 16px rgba(0,0,0,0.22); display:flex; flex-direction:column;">
 
             <!-- Logo 区 -->
@@ -68,13 +72,13 @@
                         <el-icon><DataLine /></el-icon>
                         <span>24h 存提款额</span>
                     </el-menu-item>
-                    <el-menu-item index="/test/netflow-comp">
-                        <el-icon><Odometer /></el-icon>
-                        <span>存提差环比</span>
-                    </el-menu-item>
                     <el-menu-item index="/test/netflow-hist">
                         <el-icon><Rank /></el-icon>
                         <span>存提差同比</span>
+                    </el-menu-item>
+                    <el-menu-item index="/test/netflow-comp">
+                        <el-icon><Odometer /></el-icon>
+                        <span>存提差环比</span>
                     </el-menu-item>
 
                     <div class="menu-group-label">投/存比</div>
@@ -103,10 +107,35 @@
                         <span>游戏盈利 (CG)</span>
                     </el-menu-item>
                 </el-sub-menu>
+
+                <!-- 用户设置（仅管理员）-->
+                <el-sub-menu v-if="auth.isAdmin" index="user-settings">
+                    <template #title>
+                        <el-icon><UserFilled /></el-icon>
+                        <span>用户设置</span>
+                    </template>
+                    <el-menu-item index="/users">
+                        <el-icon><User /></el-icon>
+                        <span>用户管理</span>
+                    </el-menu-item>
+                </el-sub-menu>
             </el-menu>
 
-            <!-- 底部版本号 -->
-            <div class="sidebar-footer">v 1.1</div>
+            <!-- 底部：当前用户 + 退出登录 -->
+            <div class="sidebar-account">
+                <div class="account-info">
+                    <el-icon class="account-avatar"><User /></el-icon>
+                    <div class="account-meta">
+                        <div class="account-name">{{ auth.user?.username || '—' }}</div>
+                        <div class="account-role">{{ auth.isAdmin ? '管理员' : '用户' }}</div>
+                    </div>
+                    <el-tooltip content="退出登录" placement="top">
+                        <el-button link class="account-logout" @click="doLogout">
+                            <el-icon><SwitchButton /></el-icon>
+                        </el-button>
+                    </el-tooltip>
+                </div>
+            </div>
         </el-aside>
 
         <el-container style="background:#f0f2f5; overflow:hidden;">
@@ -122,7 +151,17 @@ import {
     Setting, Warning, Monitor, Tools,
     DataAnalysis, DataLine, Histogram, Trophy,
     Top, Bottom, Odometer, Rank,
+    UserFilled, User, SwitchButton,
 } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from './stores/authStore.js'
+
+const auth = useAuthStore()
+const router = useRouter()
+async function doLogout() {
+    await auth.logout()
+    router.replace('/login')
+}
 </script>
 
 <style scoped>
@@ -175,15 +214,24 @@ import {
     pointer-events: none;
 }
 
-/* ── 底部版本 ─────────────────────────────────────────────────────────────── */
-.sidebar-footer {
-    padding: 10px 20px;
-    font-size: 10px;
-    color: rgba(255,255,255,0.2);
-    text-align: right;
+/* ── 底部账号区 ───────────────────────────────────────────────────────────── */
+.sidebar-account {
     flex-shrink: 0;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 10px 12px;
 }
+.account-info { display: flex; align-items: center; gap: 10px; padding: 4px 6px; }
+.account-avatar {
+    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+}
+.account-meta { flex: 1; min-width: 0; }
+.account-name { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9); line-height: 1.3;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.account-role { font-size: 11px; color: rgba(255,255,255,0.4); line-height: 1.2; }
+.account-logout { color: rgba(255,255,255,0.5); font-size: 17px; flex-shrink: 0; }
+.account-logout:hover { color: #ff7875; }
 
 /* ── 菜单激活态优化 ───────────────────────────────────────────────────────── */
 :deep(.el-menu-item.is-active) {

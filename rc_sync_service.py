@@ -25,6 +25,14 @@ BACKEND_URL    = os.environ.get('BACKEND_URL', 'http://localhost:3000')
 RC_URL_DEFAULT = "https://rc-client.platform88.me"
 STATE_FILE     = "rc_sync_state.json"
 
+# 后端启用登录鉴权后，worker 用 X-Worker-Token 放行（与后端 WORKER_TOKEN 一致）。
+# 建一个带该头的 Session，并把模块级 requests.get/post 指向它，使本文件所有调用自动带令牌。
+WORKER_TOKEN = os.environ.get('WORKER_TOKEN', 'rcsqa-worker-token')
+_worker_sess = requests.Session()
+_worker_sess.headers.update({'X-Worker-Token': WORKER_TOKEN})
+requests.get  = _worker_sess.get
+requests.post = _worker_sess.post
+
 # 测试站凭证
 _TEST_USERNAME   = os.environ.get('RC_USERNAME', '')
 _TEST_PASSWORD   = os.environ.get('RC_PASSWORD', '')
