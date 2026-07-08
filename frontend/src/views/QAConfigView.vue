@@ -212,7 +212,7 @@
                             <el-select v-model="exportForm.endpoint" style="width: 260px;" @change="onEndpointChange">
                                 <el-option value="allTransactionAlerts"  label="allTransactionAlerts（存提款）" />
                                 <el-option value="allBetAlerts"          label="allBetAlerts（投注优惠）" />
-                                <el-option value="allGameProfitAlerts"   label="allGameProfitAlerts（游戏盈利 CG）" />
+                                <el-option value="allGameProfitAlerts"   label="allGameProfitAlerts（游戏盈利）" />
                                 <el-option value="rewardAlerts"          label="rewardAlerts（优惠/红利）" />
                             </el-select>
                         </div>
@@ -513,7 +513,7 @@ const ALERT_TYPE_MAP = {
         { value: 'bet-deposit-promo', label: 'bet-deposit-promo（投/存+惠比）' },
     ],
     allGameProfitAlerts: [
-        { value: 'game-profit', label: 'game-profit（游戏盈利 CG）' },
+        { value: 'game-profit', label: 'game-profit（游戏盈利）' },
     ],
     rewardAlerts: [
         { value: 'reward-cumulative', label: 'reward-cumulative（优惠同比）' },
@@ -646,7 +646,7 @@ const BATCH_TYPE_DEFS = [
     { key: 'tl-5',  label: '24小时存提款额',      api: () => axios.get(`${API}/test-lists/5`),         storageKey: syncKey },
     { key: 'tl-6',  label: '投/存比',             api: () => axios.get(`${API}/test-lists/6`),         storageKey: syncKey },
     { key: 'tl-7',  label: '投/存+惠比',          api: () => axios.get(`${API}/test-lists/7`),         storageKey: syncKey },
-    { key: 'gp',    label: '游戏盈利(CG)',         api: () => axios.get(`${API}/game-profit-lists`),    storageKey: gpSyncKey },
+    { key: 'gp',    label: '游戏盈利',             api: () => axios.get(`${API}/game-profit-lists`),    storageKey: gpSyncKey },
     { key: 'tl-9',  label: '存提差环比',           api: () => axios.get(`${API}/test-lists/9`),         storageKey: syncKey },
     { key: 'tl-10', label: '存提差同比',           api: () => axios.get(`${API}/test-lists/10`),        storageKey: syncKey },
     { key: 'tl-11', label: '优惠同比',             api: () => axios.get(`${API}/test-lists/11`),        storageKey: syncKey },

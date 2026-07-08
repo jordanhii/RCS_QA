@@ -17,6 +17,7 @@
 
             <!-- 菜单 -->
             <el-menu
+                class="sidebar-menu"
                 active-text-color="#40a9ff"
                 background-color="transparent"
                 text-color="rgba(255,255,255,0.65)"
@@ -104,7 +105,7 @@
                     <div class="menu-group-label">游戏告警</div>
                     <el-menu-item index="/test/game-profit">
                         <el-icon><Trophy /></el-icon>
-                        <span>游戏盈利 (CG)</span>
+                        <span>游戏盈利</span>
                     </el-menu-item>
                 </el-sub-menu>
 
@@ -165,6 +166,17 @@ async function doLogout() {
 </script>
 
 <style scoped>
+/* 侧边菜单仍可滚动，但隐藏滚动条（Firefox / IE / WebKit） */
+.sidebar-menu {
+    scrollbar-width: none;        /* Firefox */
+    -ms-overflow-style: none;     /* IE / 旧 Edge */
+}
+.sidebar-menu::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;                /* Chrome / Safari / 新 Edge */
+}
+
 /* ── Logo 区 ──────────────────────────────────────────────────────────────── */
 .sidebar-logo {
     display: flex;

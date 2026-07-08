@@ -25,6 +25,8 @@ const ConfigSchema = new mongoose.Schema({
     multLast:      { type: Number, default: 1.2 },  // 环比：普通告警 ≥上时段增长 × 倍数(B)
     multLastCont:  { type: Number, default: 1.5 },  // 环比：连续告警 ≥上时段增长 × 倍数(C，须 > B)
     promoName:     { type: String, default: '' },   // 同比/环比：该配置适用的优惠类型（与告警优惠类型一致，如 ALL / Mud）
+    // ── 游戏盈利 (typeId 8) 配置参数 ──────────────────────────────────────────
+    target:        { type: String, default: '' },   // 该配置适用的对象（COLORGAME / SM …，与告警记录的 target 一致）
 }, SCHEMA_OPTS)
 
 // 同一 typeId 下配置名唯一（稀疏索引允许 name 为空）
@@ -83,13 +85,15 @@ export { MAX_RECORDS }
 const GameProfitListSchema = new mongoose.Schema({
     listName:      { type: String, trim: true },
     rcBaseUrl:     { type: String, default: '' },
-    configId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Config', default: null },
+    configId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Config', default: null },                 // 兼容旧数据：单关联配置
+    configIds:     [{ type: mongoose.Schema.Types.ObjectId, ref: 'Config' }],                               // 可关联多条配置（COLORGAME / SM 各用各自配置，按 target 匹配）
     ignoreC2:      { type: Boolean, default: false },
     syncStartTime: { type: String, default: null },  // 列表级同步起始时间
     syncEndTime:   { type: String, default: null },  // 列表级同步结束时间（与起始时间组成抓取时间范围）
     records: [{
         alertId:         String,
         alertTime:       String,
+        target:          String,   // 对象（COLORGAME / SM …），用于匹配各自的关联配置
         currentBet:      Number,
         betMedian:       Number,
         currentRtp:      Number,

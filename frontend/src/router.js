@@ -20,7 +20,7 @@ const routes = [
     { path: '/config/qa',      component: QAConfigView,  name: '质检配置' },
     { path: '/users',          component: UserManageView, name: '用户管理', meta: { admin: true } },
     // ⚠️  Static route must come BEFORE /:id — Vue Router matches top-down
-    { path: '/test/game-profit', component: GameProfitView, name: '游戏盈利(CG)' },
+    { path: '/test/game-profit', component: GameProfitView, name: '游戏盈利' },
     { path: '/test/netflow-hist', component: NetflowHistView, name: '存提差同比' },
     { path: '/test/promo-yoy',   component: PromoYoyView,   name: '优惠同比' },
     { path: '/test/promo-mom',   component: PromoMomView,   name: '优惠环比' },
