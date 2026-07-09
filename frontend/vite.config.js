@@ -15,4 +15,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // 把体积大的第三方库拆成独立 chunk：首屏只下必要的，且库很少变动、可长期缓存
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-vue':     ['vue', 'vue-router', 'pinia'],
+          'vendor-element': ['element-plus'],
+          'vendor-xlsx':    ['xlsx'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 800,
+  },
 })

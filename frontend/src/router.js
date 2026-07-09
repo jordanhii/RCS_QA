@@ -1,14 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import ConfigView from './views/ConfigView.vue'
-import CaptureView from './views/CaptureView.vue'
-import QAConfigView from './views/QAConfigView.vue'
-import TestView from './views/TestView.vue'
-import GameProfitView from './views/GameProfitView.vue'
-import NetflowHistView from './views/NetflowHistView.vue'
-import PromoYoyView from './views/PromoYoyView.vue'
-import PromoMomView from './views/PromoMomView.vue'
+// 登录页首屏就要用，直接静态引入；其余页面懒加载（用到才下载各自的代码块），
+// 减小首屏 JS 体积、加快首次打开与 Render 冷启动后的加载。
 import LoginView from './views/LoginView.vue'
-import UserManageView from './views/UserManageView.vue'
+const ConfigView      = () => import('./views/ConfigView.vue')
+const CaptureView     = () => import('./views/CaptureView.vue')
+const QAConfigView    = () => import('./views/QAConfigView.vue')
+const TestView        = () => import('./views/TestView.vue')
+const GameProfitView  = () => import('./views/GameProfitView.vue')
+const NetflowHistView = () => import('./views/NetflowHistView.vue')
+const PromoYoyView    = () => import('./views/PromoYoyView.vue')
+const PromoMomView    = () => import('./views/PromoMomView.vue')
+const UserManageView  = () => import('./views/UserManageView.vue')
 import { useAuthStore } from './stores/authStore.js'
 
 const routes = [
