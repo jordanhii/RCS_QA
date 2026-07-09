@@ -1,6 +1,6 @@
 /**
  * gameProfitLogic.js
- * 游戏盈利(CG) 告警判断逻辑
+ * 游戏盈利 告警判断逻辑（对象可为 COLORGAME / SM …，各对象用各自的关联配置）
  *
  * 普通告警 = C1 AND C2（或 ignoreC2 时仅 C1）
  * 连续告警 = 普通告警 AND C3（且与上一告警的时间差 < alertInterval）
@@ -124,28 +124,30 @@ export const isMatch = (row, x, ignoreC2 = false) =>
 
 /**
  * 计算列表的通过/异常统计
- * @param {object[]} records
- * @param {number}   x
- * @param {boolean}  ignoreC2
+ * @param {object[]}          records
+ * @param {number|Function}   xArg     告警阈值 X，或按行解析的函数 (row) => X（各对象用各自配置）
+ * @param {boolean}           ignoreC2
  * @returns {{ pass: number, fail: number }}
  */
-export const getMatchCount = (records, x, ignoreC2 = false) => {
+export const getMatchCount = (records, xArg, ignoreC2 = false) => {
+    const resolveX = typeof xArg === 'function' ? xArg : () => xArg
     let pass = 0, fail = 0
     records.forEach(row => {
         if (!row.devResult || row.ignored) return
-        isMatch(row, x, ignoreC2) ? pass++ : fail++
+        isMatch(row, resolveX(row), ignoreC2) ? pass++ : fail++
     })
     return { pass, fail }
 }
 
 /**
  * 行 CSS class
- * @param {object}  row
- * @param {number}  x
- * @param {boolean} ignoreC2
+ * @param {object}          row
+ * @param {number|Function} xArg     告警阈值 X，或按行解析的函数 (row) => X
+ * @param {boolean}         ignoreC2
  * @returns {string}
  */
-export const getRowClass = (row, x, ignoreC2 = false) => {
+export const getRowClass = (row, xArg, ignoreC2 = false) => {
+    const x = typeof xArg === 'function' ? xArg(row) : xArg
     if (row.ignored) return 'row-ignored'
     if (row.devResult && !isMatch(row, x, ignoreC2)) return 'row-mismatch'
     return ''
@@ -159,19 +161,27 @@ export const getRowClass = (row, x, ignoreC2 = false) => {
  * @param {object[]} records  完整列表（含新增和已有记录）
  */
 /**
- * 按告警时间升序排列后，原地设置每条记录的：
- *   lastGgr       — 上一条的 currentGgr
- *   prevAlertTime — 上一条的 alertTime（用于检查间隔判断）
+ * 原地设置每条记录的：
+ *   lastGgr       — 同一对象(target)上一条的 currentGgr
+ *   prevAlertTime — 同一对象上一条的 alertTime（用于检查间隔判断）
+ *
+ * ⚠ 按 target 分组后各自按告警时间升序推导：COLORGAME 和 SM 的 GGR 连续性互不影响，
+ *   否则混排时一条 COLORGAME 可能错误地拿到上一条 SM 的 GGR。
  */
 export const applyLastGgr = records => {
-    const sorted = [...records].sort((a, b) => {
-        const ta = a.alertTime ? new Date(a.alertTime).getTime() : 0
-        const tb = b.alertTime ? new Date(b.alertTime).getTime() : 0
-        return ta - tb
-    })
-    sorted.forEach((row, i) => {
-        const prev = sorted[i - 1]
-        row.lastGgr       = i === 0 ? 0     : Number(prev.currentGgr) || 0
-        row.prevAlertTime = i === 0 ? ''    : (prev.alertTime || '')
-    })
+    const timeOf = r => (r.alertTime ? new Date(r.alertTime).getTime() : 0)
+    const groups = new Map()
+    for (const row of records) {
+        const key = String(row.target ?? '')
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key).push(row)
+    }
+    for (const group of groups.values()) {
+        const sorted = [...group].sort((a, b) => timeOf(a) - timeOf(b))
+        sorted.forEach((row, i) => {
+            const prev = sorted[i - 1]
+            row.lastGgr       = i === 0 ? 0  : Number(prev.currentGgr) || 0
+            row.prevAlertTime = i === 0 ? '' : (prev.alertTime || '')
+        })
+    }
 }

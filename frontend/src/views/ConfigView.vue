@@ -144,8 +144,24 @@
                         </div>
                     </template>
 
-                    <!-- 游戏盈利(CG) (8)：告警阈值X / 连续告警阈值Y -->
+                    <!-- 游戏盈利 (8)：对象 / 告警阈值X / 连续告警阈值Y -->
                     <template v-if="Number(activeTab) === 8">
+                        <div class="param-row">
+                            <div class="param-row-label">
+                                对象
+                                <el-tooltip placement="top">
+                                    <template #content>该配置适用的对象（与告警记录的 target 一致，大小写不敏感）；检查时各对象自动匹配各自配置</template>
+                                    <el-icon size="13" color="#c0c4cc" style="cursor:help;margin-left:3px;"><InfoFilled /></el-icon>
+                                </el-tooltip>
+                            </div>
+                            <el-select
+                                v-model="cfg.target"
+                                filterable allow-create default-first-option :reserve-keyword="false"
+                                placeholder="选择对象（COLORGAME / SM）" style="width:300px;"
+                                @change="queueSaveCfg(cfg)">
+                                <el-option v-for="t in GAME_TARGET_OPTIONS" :key="t" :label="t" :value="t" />
+                            </el-select>
+                        </div>
                         <div class="param-row">
                             <div class="param-row-label">
                                 告警阈值 X (%)
@@ -405,6 +421,9 @@ import { REWARD_TYPE_OPTIONS } from '../logic/alertTypes.js'
 // 配置的「优惠类型」存为逗号分隔字符串，支持多选；下拉绑定用数组
 const cfgPromoNames = c => String(c?.promoName ?? '').split(/[,，]/).map(s => s.trim()).filter(Boolean)
 
+// 游戏盈利「对象」可选项（可手动输入新对象）
+const GAME_TARGET_OPTIONS = ['COLORGAME', 'SM']
+
 const API = 'http://localhost:3000/api'
 const activeTab = ref('1')
 const activeCol = ref([])
@@ -416,7 +435,7 @@ const typeNames = [
     { id: 1, label: '存款（天）' }, { id: 2, label: '存款（月）' },
     { id: 3, label: '提款（天）' }, { id: 4, label: '提款（月）' },
     { id: 5, label: '24h 存提' },  { id: 6, label: '投/存比' },
-    { id: 7, label: '投/存+惠比' }, { id: 8, label: '游戏盈利(CG)' },
+    { id: 7, label: '投/存+惠比' }, { id: 8, label: '游戏盈利' },
     { id: 9, label: '存提差环比' },
     { id: 10, label: '存提差同比' },
     { id: 11, label: '优惠同比' },
@@ -431,7 +450,7 @@ const GROUP_HINTS = {
     5: '24h 存提额 — 检测比值阈值 + 连续增量',
     6: '投/存比 — 检测比值阈值 + 连续增量',
     7: '投/存+惠比 — 检测比值阈值 + 连续增量',
-    8: '游戏盈利(CG) — 检测 COLORGAME 普通告警（C1 AND C2）与连续告警（C1 AND C2 AND C3）',
+    8: '游戏盈利 — 检测各对象（COLORGAME / SM …）普通告警（C1 AND C2）与连续告警（C1 AND C2 AND C3）',
     9: '存提差环比 — 每 X 分钟检查，Last存提差 − 当前存提差 ≥ Y 时触发',
     10: '存提差同比 — 日累计提款 ≥ X 且存提差 < 任意两个历史值时触发',
     11: '优惠同比 — 普通告警：今日累计 ≥ 前7天/前30天平均×倍数；连续告警：间隔后恶化到 ≥ 前7天/前30天平均×连续倍数；每个优惠类型可独立配置',
@@ -459,6 +478,7 @@ const loadConfigs = async () => {
             multLast:       c.multLast       ?? 1.2,
             multLastCont:   c.multLastCont   ?? 1.5,
             promoName:      c.promoName      ?? '',
+            target:         c.target         ?? '',
             _isEditingName: false,
             _tempName:      c.name,
             _saveState:     'idle',
@@ -526,7 +546,7 @@ const addConfig = () => {
         if (!value?.trim()) return
         const tid = Number(activeTab.value)
         const res = await axios.post(`${API}/configs`,
-            tid === 8 ? { typeId: tid, name: value, xThreshold: 2500, yThreshold: 10, alertInterval: 60 }
+            tid === 8 ? { typeId: tid, name: value, target: '', xThreshold: 2500, yThreshold: 10, alertInterval: 60 }
           : tid === 9 ? { typeId: tid, name: value, alertInterval: 60, yThreshold: 0 }
           : tid === 10 ? { typeId: tid, name: value, xThreshold: 0, alertInterval: 60 }
           : tid === 11 ? { typeId: tid, name: value, promoName: '', startThreshold: 0, mult7: 1.2, mult30: 1.2, mult7Cont: 1.5, mult30Cont: 1.5, alertInterval: 30 }
@@ -565,6 +585,7 @@ const saveConfig = async (cfg) => {
             multLast:       cfg.multLast       ?? 1.2,
             multLastCont:   cfg.multLastCont   ?? 1.5,
             promoName:      cfg.promoName      ?? '',
+            target:         cfg.target         ?? '',
         }
         await axios.post(`${API}/configs`, payload)
         cfg._saveState = 'idle'

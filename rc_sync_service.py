@@ -25,6 +25,22 @@ BACKEND_URL    = os.environ.get('BACKEND_URL', 'http://localhost:3000')
 RC_URL_DEFAULT = "https://rc-client.platform88.me"
 STATE_FILE     = "rc_sync_state.json"
 
+# 后端启用登录鉴权后，worker 用 X-Worker-Token 放行（与后端 WORKER_TOKEN 一致）。
+# 建一个带该头的 Session，并把模块级 requests.get/post 指向它，使本文件所有调用自动带令牌。
+WORKER_TOKEN = os.environ.get('WORKER_TOKEN', 'rcsqa-worker-token')
+_worker_sess = requests.Session()
+_worker_sess.headers.update({'X-Worker-Token': WORKER_TOKEN})
+requests.get  = _worker_sess.get
+requests.post = _worker_sess.post
+
+# 本文件部分调用直接走 urllib（urlopen/Request），不经过上面的 requests 覆盖，
+# 必须手动带上同一个 worker 令牌头，否则后端 requireAuthOrWorker 会返回 401。
+def _worker_headers(extra=None):
+    h = {"X-Worker-Token": WORKER_TOKEN}
+    if extra:
+        h.update(extra)
+    return h
+
 # 测试站凭证
 _TEST_USERNAME   = os.environ.get('RC_USERNAME', '')
 _TEST_PASSWORD   = os.environ.get('RC_PASSWORD', '')
@@ -64,7 +80,8 @@ def fetch_rc_url(override=None):
     if override:
         return override.strip().rstrip("/")
     try:
-        with urlopen(f"{BACKEND_URL}/api/qa-config", timeout=5) as r:
+        req = Request(f"{BACKEND_URL}/api/qa-config", headers=_worker_headers())
+        with urlopen(req, timeout=5) as r:
             cfg = json.loads(r.read())
             url = cfg.get("rcBaseUrl", "").strip().rstrip("/")
             return url if url else RC_URL_DEFAULT
@@ -85,7 +102,7 @@ def _push_log_async(line: str) -> None:
             req = Request(
                 f"{BACKEND_URL}/api/sync-log",
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers=_worker_headers({"Content-Type": "application/json"}),
                 method="POST",
             )
             urlopen(req, timeout=2)
@@ -132,7 +149,7 @@ def push_to_backend(records, source, rc_url=''):
     req = Request(
         f"{BACKEND_URL}/api/sync-cache",
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=_worker_headers({"Content-Type": "application/json"}),
         method="POST",
     )
     try:
@@ -487,7 +504,9 @@ async def run():
                 try:
                     import urllib.request as _ur
                     qs  = urlencode({"url": RC_URL})
-                    with _ur.urlopen(f"{BACKEND_URL}/api/sync-requested?{qs}", timeout=3) as r:
+                    req = _ur.Request(f"{BACKEND_URL}/api/sync-requested?{qs}",
+                                      headers=_worker_headers())
+                    with _ur.urlopen(req, timeout=3) as r:
                         result = json.loads(r.read())
 
                     # Successful poll — reset backoff

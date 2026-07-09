@@ -233,7 +233,7 @@ const GROUP_HINTS = {
     5: '24h 存提额 — 检测比值阈值 + 连续增量',
     6: '投/存比 — 检测比值阈值 + 连续增量',
     7: '投/存+惠比 — 检测比值阈值 + 连续增量',
-    8: '游戏盈利(CG) — COLORGAME 普通告警与连续告警字段映射',
+    8: '游戏盈利 — 各对象（COLORGAME / SM …）普通告警与连续告警字段映射',
     9: '存提差环比 — netflow-additional-present-day，对比当前与上期存提差',
     10: '存提差同比 — netflow-additional-historical，对比日累计存提差与历史同期',
     11: '优惠同比 — reward-cumulative，今日累计优惠 ≥ 前7天/前30天平均×倍数（阈值取自注释）',
@@ -246,7 +246,7 @@ const typeNames = [
     { id: 1, label: '存款（天）' }, { id: 2, label: '存款（月）' },
     { id: 3, label: '提款（天）' }, { id: 4, label: '提款（月）' },
     { id: 5, label: '24h 存提' },  { id: 6, label: '投/存比' },
-    { id: 7, label: '投/存+惠比' },{ id: 8, label: '游戏盈利(CG)' },
+    { id: 7, label: '投/存+惠比' },{ id: 8, label: '游戏盈利' },
     { id: 9, label: '存提差环比' },
     { id: 10, label: '存提差同比' },
     { id: 11, label: '优惠同比' },
@@ -313,6 +313,7 @@ const LIST_FIELDS = {
     8: [
         { value: 'alertId',         label: '告警单号' },
         { value: 'alertTime',       label: '告警时间' },
+        { value: 'target',          label: '对象' },
         { value: 'currentBet',      label: '当前投注额' },
         { value: 'betMedian',       label: '投注中位数' },
         { value: 'currentRtp',      label: '当前RTP' },
@@ -441,6 +442,7 @@ const DEFAULT_FIELDS = {
     8: [
         { listField: 'alertId',         path: 'alertNumber' },
         { listField: 'alertTime',       path: 'alertGeneratedTime' },
+        { listField: 'target',          path: 'target' },
         { listField: 'currentBet',      path: 'alertMetadata.currentBet' },
         { listField: 'betMedian',       path: 'alertMetadata.betMedian' },
         { listField: 'currentRtp',      path: 'alertMetadata.currentRtp' },

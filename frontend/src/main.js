@@ -7,6 +7,20 @@ import './assets/styles/theme.css'
 import App from './App.vue'
 import router from './router'
 import { ElNotification } from 'element-plus'
+import axios from 'axios'
+
+// ── 鉴权：所有请求带上 httpOnly cookie；401 自动踢回登录页 ──────────────────
+axios.defaults.withCredentials = true
+axios.interceptors.response.use(
+    r => r,
+    err => {
+        const url = err.config?.url || ''
+        if (err.response?.status === 401 && !url.includes('/auth/') && router.currentRoute.value.path !== '/login') {
+            router.replace('/login')
+        }
+        return Promise.reject(err)
+    },
+)
 
 const app = createApp(App)
 app.use(createPinia())

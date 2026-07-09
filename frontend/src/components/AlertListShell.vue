@@ -228,8 +228,10 @@
                         <span class="stat-item" :class="getMatchCount(list).fail > 0 ? 'stat-fail' : 'stat-ok'">
                             <el-icon><CircleClose /></el-icon>&nbsp;逻辑异常：<b>{{ getMatchCount(list).fail }}</b>
                         </span>
-                        <el-tag v-if="getMatchCount(list).fail > 0" type="danger" effect="dark" size="small" style="margin-left: 10px;">
-                            ⚠ {{ getMatchCount(list).fail }} 条异常，请检查高亮行
+                        <el-tag v-if="getMatchCount(list).fail > 0" type="danger" effect="dark" size="small"
+                            style="margin-left: 10px; cursor:pointer;"
+                            @click="list._onlyMismatch = true; list._currentPage = 1">
+                            ⚠ {{ getMatchCount(list).fail }} 条异常，点此只看异常
                         </el-tag>
                         <el-tag v-else-if="list.records.length > 0 && getMatchCount(list).pass > 0" type="success" effect="dark" size="small" style="margin-left: 10px;">
                             ✓ 逻辑全部一致
@@ -253,6 +255,14 @@
                                     </el-dropdown-menu>
                                 </template>
                             </el-dropdown>
+                            <el-button size="small"
+                                :type="list._onlyMismatch ? 'danger' : ''"
+                                :plain="!list._onlyMismatch"
+                                :disabled="getMatchCount(list).fail === 0 && !list._onlyMismatch"
+                                @click="list._onlyMismatch = !list._onlyMismatch; list._currentPage = 1">
+                                <el-icon style="margin-right:3px;"><Warning /></el-icon>
+                                {{ list._onlyMismatch ? '显示全部' : '只看异常' }}<template v-if="!list._onlyMismatch && getMatchCount(list).fail > 0"> ({{ getMatchCount(list).fail }})</template>
+                            </el-button>
                             <template v-if="list._selectedRows && list._selectedRows.length > 0">
                                 <el-divider direction="vertical" />
                                 <span class="bulk-count">已选 <b>{{ list._selectedRows.length }}</b> 条</span>
@@ -279,7 +289,7 @@
                                 @change="list._currentPage = 1"
                                 clearable
                             />
-                            <span v-if="list._dateRange || list._rewardTypeFilter" class="filter-count">
+                            <span v-if="list._dateRange || list._rewardTypeFilter || list._onlyMismatch" class="filter-count">
                                 {{ getFilteredRecords(list).length }} / {{ list.records.length }} 条
                             </span>
                         </div>
@@ -542,6 +552,10 @@ const manualSync = async (list) => {
 }
 
 // ─── 过滤 / 分页 ────────────────────────────────────────────────────────────────
+// 某行是否「逻辑异常」：复用页面注入的 getRowClass（返回 'row-mismatch' 即异常），口径与表格高亮一致
+const isMismatch = (list, row) =>
+    getRowClass(row, list.records.indexOf(row), list) === 'row-mismatch'
+
 const getFilteredRecords = (list) => {
     let rows = list.records
     if (list._dateRange && list._dateRange[0]) {
@@ -555,6 +569,9 @@ const getFilteredRecords = (list) => {
     }
     if (props.extraFilter) {
         rows = rows.filter(r => props.extraFilter(list, r))
+    }
+    if (list._onlyMismatch) {
+        rows = rows.filter(r => isMismatch(list, r))
     }
     return rows
 }
@@ -600,7 +617,7 @@ const saveList = async (list) => {
         const { _tempName, _isSaving, _saveState, _savedAt, _autosaveOn,
                 _currentPage, _pageSize, _customPageSize, _isEditingName,
                 _selectedRows, _syncEnabled, _lastSyncAt, _lastSyncCount, _isSyncingNow,
-                _dateRange, _rewardTypeFilter, _isImportingSync, ...payload } = list
+                _dateRange, _rewardTypeFilter, _onlyMismatch, _isImportingSync, ...payload } = list
         if (props.multiConfig) {
             // 保留 configIds，并写回兼容旧字段 configId
             payload.configIds = list.configIds || []
@@ -655,6 +672,7 @@ const decorateList = (l) => ({
     _isSyncingNow: false,
     _dateRange: null,
     _rewardTypeFilter: '',
+    _onlyMismatch: false,
     _isEditingName: false,
     // page-specific extra fields (e.g. ignoreC2). Use existing value if present.
     ...Object.fromEntries(

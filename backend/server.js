@@ -14,6 +14,7 @@
 import express from 'express'
 import mongoose from 'mongoose'
 import cors from 'cors'
+import cookieParser from 'cookie-parser'
 
 import configsRouter          from './routes/configs.js'
 import testListsRouter        from './routes/testLists.js'
@@ -22,6 +23,11 @@ import qaConfigRouter         from './routes/qaConfig.js'
 import captureConfigRouter    from './routes/captureConfig.js'
 import syncCacheRouter, { restoreSyncCacheFromDb } from './routes/syncCache.js'
 import exportRouter           from './routes/export.js'
+import authRouter             from './routes/auth.js'
+import usersRouter            from './routes/users.js'
+import { requireAuth, requireAdmin, requireAuthOrWorker } from './middleware/auth.js'
+import bcrypt from 'bcryptjs'
+import { User } from './models/index.js'
 
 const app = express()
 
@@ -34,6 +40,7 @@ app.use(cors({
     credentials: true,
 }))
 app.use(express.json({ limit: '10mb' }))
+app.use(cookieParser())
 
 // ── MongoDB ────────────────────────────────────────────────────────────────────
 mongoose.connect('mongodb://127.0.0.1:27017/qa_alert_system')
@@ -41,8 +48,18 @@ mongoose.connect('mongodb://127.0.0.1:27017/qa_alert_system')
         console.log('✅ MongoDB 连接成功！')
         await runStartupMigrations()
         await restoreSyncCacheFromDb()
+        await seedAdmin()
     })
     .catch(err => console.error('❌ MongoDB 连接失败:', err.message))
+
+/** 首个管理员：无 admin 时按 .env（ADMIN_USERNAME / ADMIN_PASSWORD）预置，默认 admin / Admin@123 */
+async function seedAdmin() {
+    if (await User.exists({ role: 'admin' })) return
+    const username = process.env.ADMIN_USERNAME || 'admin'
+    const password = process.env.ADMIN_PASSWORD || 'Admin@123'
+    await User.create({ username, passwordHash: await bcrypt.hash(password, 10), role: 'admin' })
+    console.log(`👤 已创建初始管理员：${username} / ${password}（请尽快登录并修改密码）`)
+}
 
 /**
  * 启动时一次性数据库迁移：
@@ -90,13 +107,24 @@ async function runStartupMigrations() {
 }
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
-app.use('/api/configs',            configsRouter)
-app.use('/api/test-lists',         testListsRouter)
-app.use('/api/game-profit-lists',  gameProfitListsRouter)
-app.use('/api/qa-config',          qaConfigRouter)
-app.use('/api/capture-config',     captureConfigRouter)
-app.use('/api',                    syncCacheRouter)
-app.use('/api',                    exportRouter)
+// 公开：登录系统
+app.use('/api/auth', authRouter)
+
+// 仅管理员：用户管理
+app.use('/api/users', requireAuth, requireAdmin, usersRouter)
+
+// 前端业务路由：需登录
+app.use('/api/configs',            requireAuth, configsRouter)
+app.use('/api/test-lists',         requireAuth, testListsRouter)
+app.use('/api/game-profit-lists',  requireAuth, gameProfitListsRouter)
+app.use('/api/capture-config',     requireAuth, captureConfigRouter)
+
+// qa-config 与 sync-* 同步服务(worker)也要访问 → 登录 cookie 或 worker 令牌任一通过
+app.use('/api/qa-config',          requireAuthOrWorker, qaConfigRouter)
+app.use('/api',                    requireAuthOrWorker, syncCacheRouter)
+
+// 导出（前端触发 Python worker）：需登录
+app.use('/api',                    requireAuth, exportRouter)
 
 // ── 404 ────────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ error: '接口不存在' }))
