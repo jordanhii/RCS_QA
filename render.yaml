@@ -12,9 +12,10 @@ services:
       - key: MONGODB_URI
         sync: false
       # ── 安全密钥 ──────────────────────────────────────────────────────────
-      # APP_SECRET_KEY 必须与你本地 .env 一致，否则已加密的账号解不开
+      # 云端是全新数据库、账号在页面上重新配置，所以 APP_SECRET_KEY 无需与本地一致，
+      # 交给 Render 自动生成即可（生成后固定不变，已加密账号可正常解密）。
       - key: APP_SECRET_KEY
-        sync: false
+        generateValue: true
       - key: JWT_SECRET
         generateValue: true
       # WORKER_TOKEN 要和你 Mac 同步脚本 .env 里的一致，手动填同一串（别用随机生成）
