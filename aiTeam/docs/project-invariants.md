@@ -24,7 +24,7 @@ classify it as high risk and explain the reason before editing.
 
 - `backend/server.js` should stay an entry point and route mount file.
 - Backend business logic belongs in route/helper modules.
-- Frontend API callers currently assume `http://localhost:3000/api`.
+- Frontend API 基址是 `import.meta.env.VITE_API_URL`，默认同源 `/api`（后端同域托管前端；本地开发经 Vite proxy 转发到 3000）。**不要写死成 `http://localhost:3000`**。
 - API response shape is a contract with frontend views and worker flows.
 - Static Vue routes such as `/test/game-profit` and `/test/netflow-hist` must
   remain before `/test/:id`.
@@ -34,6 +34,15 @@ classify it as high risk and explain the reason before editing.
 - MongoDB schema changes must account for old documents.
 - Startup migrations should be explicit and visible.
 - List records can grow large; respect `MAX_RECORDS` and document size risk.
+
+## Security And Credentials
+
+- RC 账号密码/OTP 必须经 `backend/crypto.js`（AES-256-GCM）加密后存 `QAConfig.rcEnvs`，
+  **绝不明文入库**。对前端接口只回「是否已设置」（见 qaConfig.js `maskEnv`），**绝不回传密文/明文**；
+  解密后的明文只经 `/rc-envs/credentials`（worker 令牌或管理员）给同步/导出用。
+- 生产环境（`NODE_ENV=production`）缺少 `APP_SECRET_KEY` / `JWT_SECRET` / `WORKER_TOKEN`，
+  或它们仍是默认值 → 后端**拒绝启动**（`server.js` assertProdSecrets）。不要为图方便绕过。
+- `APP_SECRET_KEY` 一旦变更，已加密的账号将无法解密——视为高风险变更。
 
 ## Calculation And Export
 

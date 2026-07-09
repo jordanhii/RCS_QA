@@ -11,7 +11,8 @@ description: Use when modifying Vue views, Element Plus UI, router behavior, Pin
 - `frontend/src/router.js`
 - relevant file under `frontend/src/views/`
 - `frontend/src/stores/appStore.js` if QA config or RC environments are involved
-- `frontend/src/composables/useSyncManager.js` if sync state is involved
+- `frontend/src/logic/syncCore.js` if sync request/cooldown/time-window behavior is involved（同步核心，改这里而非在视图/外壳里重复）
+- `frontend/src/composables/useSyncManager.js` if AlertListShell sync orchestration is involved
 - relevant logic file under `frontend/src/logic/`
 
 ## 设计规范要点（细节见 `frontend/DESIGN.md`，冲突以 DESIGN.md 为准）
@@ -32,7 +33,7 @@ description: Use when modifying Vue views, Element Plus UI, router behavior, Pin
 1. Locate route/view ownership.
 2. Check whether behavior is view-local, store-level, composable-level, or logic-helper-level.
 3. Keep reusable calculation behavior in `frontend/src/logic/` when practical.
-4. Preserve shared sync behavior in `useSyncManager.js`.
+4. 同步的请求/冷却/时间窗行为改 `frontend/src/logic/syncCore.js`（TestView 与 AlertListShell 共用它）。
 5. Keep UI text and state consistent with existing Chinese UI.
 6. Add or update focused Vitest coverage for pure logic changes.
 
@@ -40,8 +41,8 @@ description: Use when modifying Vue views, Element Plus UI, router behavior, Pin
 
 - Use Vue 3 patterns already present in the repo.
 - Use Element Plus conventions already present in views.
-- Do not duplicate sync timer/cooldown logic in views.
-- Avoid changing API base URL behavior casually; callers use `http://localhost:3000/api`.
+- 不要在视图里重复同步的请求/冷却/时间窗逻辑——共用 `frontend/src/logic/syncCore.js`。
+- Avoid changing API base URL behavior casually; 基址是 `import.meta.env.VITE_API_URL || '/api'`（默认同源）。
 
 ## 告警逻辑检查子页面 — 结果列统一约定（务必照此，新页面要和现有页面一致）
 
