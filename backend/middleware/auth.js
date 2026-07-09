@@ -32,7 +32,7 @@ export function setAuthCookie(res, token) {
     res.cookie(COOKIE_NAME, token, {
         httpOnly: true,
         sameSite: 'lax',
-        secure: false,                       // 本地 http；上线 https 时改 true
+        secure: process.env.NODE_ENV === 'production',   // 生产(https)自动加 Secure；本地 http 关闭
         maxAge: SESSION_HOURS * 3600 * 1000,
         path: '/',
     })

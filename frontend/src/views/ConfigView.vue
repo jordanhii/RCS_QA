@@ -424,7 +424,7 @@ const cfgPromoNames = c => String(c?.promoName ?? '').split(/[,，]/).map(s => s
 // 游戏盈利「对象」可选项（可手动输入新对象）
 const GAME_TARGET_OPTIONS = ['COLORGAME', 'SM']
 
-const API = 'http://localhost:3000/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 const activeTab = ref('1')
 const activeCol = ref([])
 const configs = ref([])

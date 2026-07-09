@@ -42,7 +42,11 @@ _PROD_OTP_SECRET = os.environ.get('RC_PROD_OTP_SECRET','')
 _PROD_DOMAINS    = {'platform10.me'}
 
 def get_credentials(domain: str) -> tuple:
-    """根据域名返回 (username, password, otp_secret)。"""
+    """取账号：优先用后端注入的 RCS_CRED_*（来自数据库账号配置，已解密），
+    否则回落到 .env 里按域名区分的旧凭证。"""
+    ov_user = os.environ.get('RCS_CRED_USER', '')
+    if ov_user:
+        return ov_user, os.environ.get('RCS_CRED_PASS', ''), os.environ.get('RCS_CRED_OTP', '')
     lower = (domain or '').lower()
     if any(d in lower for d in _PROD_DOMAINS):
         return _PROD_USERNAME, _PROD_PASSWORD, _PROD_OTP_SECRET

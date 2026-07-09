@@ -50,9 +50,10 @@ IGO_BASE_URL = "https://igo-web.igo8.me/igo-report"
 TARGET_PAGE  = f"{IGO_BASE_URL}/transaction/specialtyGames"
 STATE_FILE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "igo_state.json")
 
-# 默认账号密码（从参考代码中保留；可被 --username/--password 覆盖）
-DEFAULT_USERNAME = "yenhui"
-DEFAULT_PASSWORD = "123456"
+# 账号不再写死：优先用后端注入的 RCS_CRED_*（数据库账号配置，已解密），
+# 否则用环境变量 IGO_USERNAME/IGO_PASSWORD；仍可被 --username/--password 覆盖。
+DEFAULT_USERNAME = os.environ.get("RCS_CRED_USER") or os.environ.get("IGO_USERNAME", "")
+DEFAULT_PASSWORD = os.environ.get("RCS_CRED_PASS") or os.environ.get("IGO_PASSWORD", "")
 
 NUMERIC_FIELDS = [
     "totalAbandonedPot", "totalAmount", "totalBetCash", "totalBetNN",

@@ -445,7 +445,7 @@ import { Refresh, RefreshRight, Loading, CircleCheck, CircleClose } from '@eleme
 import { ElNotification } from 'element-plus'
 import { InfoFilled, Download, QuestionFilled } from '@element-plus/icons-vue'
 
-const API = 'http://localhost:3000/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 const activeTab = ref('sync')
 
 // ── Sync config ───────────────────────────────────────────────────────────────

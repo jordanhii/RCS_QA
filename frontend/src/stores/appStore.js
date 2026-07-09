@@ -8,7 +8,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import axios from 'axios'
 
-const API = 'http://localhost:3000/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 
 export const useAppStore = defineStore('app', () => {
     // ── QA global config ───────────────────────────────────────────────────────

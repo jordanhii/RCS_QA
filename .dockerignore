@@ -1,0 +1,19 @@
+**/node_modules
+frontend/dist
+.git
+.env
+.env.local
+*.log
+logs
+__pycache__
+*.pyc
+excel
+note
+.claude
+.DS_Store
+*.timestamp-*.mjs
+# 本地运行状态文件，不带进镜像
+rc_sync_state.json
+state.json
+state_rcclientplatform10me.json
+igo_state.json

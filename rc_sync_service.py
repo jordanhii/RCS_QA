@@ -54,11 +54,27 @@ _PROD_OTP_SECRET = os.environ.get('RC_PROD_OTP_SECRET', '')
 _PROD_DOMAINS = {'platform10.me'}
 
 def get_credentials(rc_url: str) -> tuple:
-    """根据 RC 地址返回对应的 (username, password, otp_secret)。"""
+    """回落方案：从 .env 里按域名区分返回 (username, password, otp_secret)。"""
     url_lower = (rc_url or '').lower()
     if any(d in url_lower for d in _PROD_DOMAINS):
         return _PROD_USERNAME, _PROD_PASSWORD, _PROD_OTP_SECRET
     return _TEST_USERNAME, _TEST_PASSWORD, _TEST_OTP_SECRET
+
+
+def fetch_credentials(rc_url: str) -> tuple:
+    """优先从后端「账号配置」按 RC 地址取账号（后端解密后返回）；
+    后端不可用或未配置时回落到 .env。"""
+    try:
+        qs = urlencode({"url": rc_url})
+        req = Request(f"{BACKEND_URL}/api/qa-config/rc-envs/credentials?{qs}",
+                      headers=_worker_headers())
+        with urlopen(req, timeout=8) as r:
+            data = json.loads(r.read())
+            if data.get("username"):
+                return data.get("username", ""), data.get("password", ""), data.get("otpSecret", "")
+    except Exception as e:
+        print(f"⚠️  从后端获取账号失败，回落到 .env（{e}）")
+    return get_credentials(rc_url)
 
 # 全局变量，在 run() 里按实际 RC_URL 赋值
 USERNAME   = ''
@@ -378,9 +394,9 @@ async def run():
     # Read RC base URL: CLI --url override > backend qa-config > default
     RC_URL = fetch_rc_url(_ARGS.url)
 
-    # 根据实际 RC 地址选择对应凭证
+    # 根据实际 RC 地址取账号：后端「账号配置」优先，.env 兜底
     global USERNAME, PASSWORD, OTP_SECRET
-    USERNAME, PASSWORD, OTP_SECRET = get_credentials(RC_URL)
+    USERNAME, PASSWORD, OTP_SECRET = fetch_credentials(RC_URL)
     log(f"🔑 使用账号: {USERNAME or '(未设置)'}  OTP: {'已配置' if OTP_SECRET else '未配置'}")
 
     async with async_playwright() as p:

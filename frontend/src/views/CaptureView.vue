@@ -31,22 +31,53 @@
                             <el-tag v-if="idx === 0" size="small" type="success" class="env-default-tag">默认</el-tag>
                         </div>
                         <span class="env-url">{{ env.rcBaseUrl }}</span>
+                        <span class="env-cred">
+                            用户名：<b>{{ env.username || '未设置' }}</b>
+                            <span class="env-badge" :class="env.hasPassword ? 'ok' : 'no'">密码 {{ env.hasPassword ? '已设置' : '未设置' }}</span>
+                            <span class="env-badge" :class="env.hasOtp ? 'ok' : 'no'">OTP {{ env.hasOtp ? '已设置' : '未设置' }}</span>
+                        </span>
                     </div>
-                    <el-button size="small" type="danger" plain @click="removeEnv(env)" :loading="isDeletingEnv === env._id">
-                        删除
-                    </el-button>
+                    <div class="env-actions">
+                        <el-button size="small" plain @click="openEdit(env)">编辑</el-button>
+                        <el-button size="small" type="danger" plain @click="removeEnv(env)" :loading="isDeletingEnv === env._id">
+                            删除
+                        </el-button>
+                    </div>
                 </div>
             </div>
 
             <!-- 新增表单 -->
             <div class="env-add-form">
-                <el-input v-model="newEnv.name" placeholder="名称（如：正式站）" style="width:140px;" />
-                <el-input v-model="newEnv.rcBaseUrl" placeholder="https://rc-client.platform88.me" style="flex:1;" />
+                <el-input v-model="newEnv.name" placeholder="名称（如：正式站）" style="width:130px;" />
+                <el-input v-model="newEnv.rcBaseUrl" placeholder="https://rc-client.platform88.me" style="flex:1; min-width:200px;" />
+                <el-input v-model="newEnv.username" placeholder="用户名" style="width:120px;" />
+                <el-input v-model="newEnv.password" type="password" show-password placeholder="密码" style="width:120px;" />
+                <el-input v-model="newEnv.otpSecret" placeholder="OTP密钥(可空)" style="width:130px;" />
                 <el-button type="primary" :loading="isAddingEnv" @click="addEnv">
                     <el-icon style="margin-right:4px;"><Plus /></el-icon> 添加
                 </el-button>
             </div>
         </div>
+
+        <!-- 编辑账号弹窗 -->
+        <el-dialog v-model="editVisible" title="编辑账号配置" width="440px">
+            <div class="edit-form">
+                <label>名称</label>
+                <el-input v-model="editEnv.name" />
+                <label>网址</label>
+                <el-input v-model="editEnv.rcBaseUrl" />
+                <label>用户名</label>
+                <el-input v-model="editEnv.username" />
+                <label>密码 <span class="edit-hint">（留空则不修改）</span></label>
+                <el-input v-model="editEnv.password" type="password" show-password placeholder="留空则不修改" />
+                <label>OTP 密钥 <span class="edit-hint">（留空则不修改；此环境无 OTP 可不填）</span></label>
+                <el-input v-model="editEnv.otpSecret" placeholder="留空则不修改" />
+            </div>
+            <template #footer>
+                <el-button @click="editVisible = false">取消</el-button>
+                <el-button type="primary" :loading="isSavingEdit" @click="saveEdit">保存</el-button>
+            </template>
+        </el-dialog>
 
         <!-- ── 字段映射配置 ────────────────────────────────────────────────── -->
         <div class="section-label">
@@ -164,7 +195,7 @@ import axios from 'axios'
 import { ElNotification, ElMessageBox } from 'element-plus'
 import { Plus, QuestionFilled, RefreshRight, Loading, CircleCheck, CircleClose, Edit, Check } from '@element-plus/icons-vue'
 
-const API = 'http://localhost:3000/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 const activeTab = ref('1')
 const endpoint = ref('')
 const fields = ref([])
@@ -182,9 +213,46 @@ const finishEdit = () => {
 
 // ─── RC 环境地址（多环境管理，统一来源）────────────────────────────────────
 const rcEnvs        = ref([])
-const newEnv        = reactive({ name: '', rcBaseUrl: '' })
+const newEnv        = reactive({ name: '', rcBaseUrl: '', username: '', password: '', otpSecret: '' })
 const isAddingEnv   = ref(false)
 const isDeletingEnv = ref(-1)
+
+const editVisible   = ref(false)
+const isSavingEdit  = ref(false)
+const editEnv       = reactive({ _id: '', name: '', rcBaseUrl: '', username: '', password: '', otpSecret: '' })
+
+const openEdit = (env) => {
+    editEnv._id       = env._id
+    editEnv.name      = env.name || ''
+    editEnv.rcBaseUrl = env.rcBaseUrl || ''
+    editEnv.username  = env.username || ''
+    editEnv.password  = ''   // 不回显，留空表示不改
+    editEnv.otpSecret = ''
+    editVisible.value = true
+}
+
+const saveEdit = async () => {
+    if (!editEnv.name.trim() || !editEnv.rcBaseUrl.trim()) {
+        ElNotification.warning({ message: '名称和网址必填', position: 'bottom-right' })
+        return
+    }
+    isSavingEdit.value = true
+    try {
+        const body = {
+            name:      editEnv.name.trim(),
+            rcBaseUrl: editEnv.rcBaseUrl.trim().replace(/\/+$/, ''),
+            username:  editEnv.username.trim(),
+        }
+        if (editEnv.password)  body.password  = editEnv.password
+        if (editEnv.otpSecret) body.otpSecret = editEnv.otpSecret.trim()
+        const { data } = await axios.put(`${API}/qa-config/rc-envs/${editEnv._id}`, body)
+        rcEnvs.value = data
+        editVisible.value = false
+        ElNotification.success({ message: '已保存', position: 'bottom-right' })
+    } catch (e) {
+        ElNotification.error({ message: e?.response?.data?.error || '保存失败', position: 'bottom-right' })
+    } finally { isSavingEdit.value = false }
+}
 
 const loadRcEnvs = async () => {
     try {
@@ -202,14 +270,20 @@ const addEnv = async () => {
     try {
         const { data } = await axios.post(`${API}/qa-config/rc-envs`, {
             name: newEnv.name.trim(),
-            rcBaseUrl: newEnv.rcBaseUrl.trim().replace(/\/+$/, '')
+            rcBaseUrl: newEnv.rcBaseUrl.trim().replace(/\/+$/, ''),
+            username: newEnv.username.trim(),
+            password: newEnv.password,
+            otpSecret: newEnv.otpSecret.trim(),
         })
         rcEnvs.value = data
         newEnv.name = ''
         newEnv.rcBaseUrl = ''
-        ElNotification.success({ message: '地址已添加', position: 'bottom-right' })
-    } catch {
-        ElNotification.error({ message: '添加失败', position: 'bottom-right' })
+        newEnv.username = ''
+        newEnv.password = ''
+        newEnv.otpSecret = ''
+        ElNotification.success({ message: '账号已添加', position: 'bottom-right' })
+    } catch (e) {
+        ElNotification.error({ message: e?.response?.data?.error || '添加失败', position: 'bottom-right' })
     } finally { isAddingEnv.value = false }
 }
 
@@ -671,10 +745,19 @@ const saveConfig = async () => {
 .env-name { font-size: 13px; font-weight: 600; color: #1d2129; }
 .env-default-tag { flex-shrink: 0; }
 .env-url  { font-size: 12px; color: #909399; font-family: monospace; word-break: break-all; }
+.env-cred { font-size: 12px; color: #606266; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.env-cred b { color: #1d2129; }
+.env-badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; }
+.env-badge.ok { color: #67c23a; background: #f0f9eb; }
+.env-badge.no { color: #c0c4cc; background: #f4f4f5; }
+.env-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .env-add-form {
-    display: flex; gap: 8px; align-items: center;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
     padding-top: 14px; border-top: 1px solid #f0f2f5; margin-top: 4px;
 }
+.edit-form { display: flex; flex-direction: column; gap: 6px; }
+.edit-form label { font-size: 13px; color: #1d2129; margin-top: 6px; }
+.edit-form .edit-hint { font-size: 11px; color: #909399; font-weight: normal; }
 
 /* ── 底部操作行 ─────────────────────────────────────────────────────────── */
 .panel-footer {

@@ -621,7 +621,7 @@ import {
 const route = useRoute()
 // 支持可读 slug（/test/netflow-comp）与旧数字路由（/test/9）两种
 const typeId = TEST_SLUG_TO_TYPEID[route.params.id] ?? Number(route.params.id)
-const API = 'http://localhost:3000/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 
 const pageTitle = computed(() => PAGE_TITLES[typeId])
 const val1Label = computed(() => getVal1Label(typeId))
@@ -758,9 +758,12 @@ const runSync = async (list, isManual = false, skipRequest = false) => {
             await new Promise(r => setTimeout(r, skipRequest ? 500 : 3000))
         }
 
-        // 抓取时间范围过滤：列表级优先，fallback 全局配置；起/止可留空 = 该端不限制
-        const sTime = globalQAConfig.value.syncStartTime || list.syncStartTime
-        const eTime = globalQAConfig.value.syncEndTime   || list.syncEndTime
+        // 抓取时间范围过滤：与界面一致——全局设了任一时间就整体用全局（子页面时间框被禁用），
+        // 否则才用列表级。不能逐字段 || 回退，否则全局只设了开始时，会误用列表级残留的旧结束时间，
+        // 把该时间之后的数据（如最新告警）悄悄过滤掉。
+        const useGlobalTime = globalQAConfig.value.syncStartTime || globalQAConfig.value.syncEndTime
+        const sTime = useGlobalTime ? globalQAConfig.value.syncStartTime : list.syncStartTime
+        const eTime = useGlobalTime ? globalQAConfig.value.syncEndTime   : list.syncEndTime
         if (sTime || eTime) {
             const sMs = sTime ? new Date(sTime).getTime() : -Infinity
             const eMs = eTime ? new Date(eTime).getTime() :  Infinity

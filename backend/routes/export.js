@@ -5,15 +5,47 @@ import os         from 'os'
 import path       from 'path'
 import { fileURLToPath } from 'url'
 import { pushLog } from './syncCache.js'
+import { QAConfig } from '../models/index.js'
+import { decryptSecret } from '../crypto.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router    = Router()
 const ah        = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 
-async function runPython(args, logType) {
+// 按 RC 地址取该环境账号（后端解密），供导出脚本登录用
+async function credsForUrl(url) {
+    const cfg  = await QAConfig.findOne({ singleton: 'default' })
+    const norm = String(url || '').trim().replace(/\/+$/, '')
+    let best = null
+    for (const e of (cfg?.rcEnvs || [])) {
+        const base = (e.rcBaseUrl || '').replace(/\/+$/, '')
+        if (!base) continue
+        if (norm === base || norm.startsWith(base + '/') || base.startsWith(norm)) {
+            if (!best || base.length > best.rcBaseUrl.replace(/\/+$/, '').length) best = e
+        }
+    }
+    if (!best) return null
+    return {
+        username:  best.username || '',
+        password:  best.passwordEnc  ? decryptSecret(best.passwordEnc)  : '',
+        otpSecret: best.otpSecretEnc ? decryptSecret(best.otpSecretEnc) : '',
+    }
+}
+
+// 把账号通过环境变量（而非命令行参数）注入子进程，避免出现在进程列表里
+function credEnv(creds) {
+    if (!creds) return {}
+    return {
+        RCS_CRED_USER: creds.username  || '',
+        RCS_CRED_PASS: creds.password  || '',
+        RCS_CRED_OTP:  creds.otpSecret || '',
+    }
+}
+
+async function runPython(args, logType, extraEnv = {}) {
     let exitCode = null, stderr = ''
     await new Promise(resolve => {
-        const proc = spawn('python3', args)
+        const proc = spawn('python3', args, { env: { ...process.env, ...extraEnv } })
         proc.stdout.on('data', d => pushLog(logType, d.toString().trim()))
         proc.stderr.on('data', d => { stderr += d; pushLog(logType, d.toString().trim()) })
         proc.on('close', code => { exitCode = code; resolve() })
@@ -43,8 +75,9 @@ router.post('/export-data', ah(async (req, res) => {
     if (alertType) args.push('--alert-type', alertType)
     if (startTime) args.push('--start-time', startTime)
 
-    pushLog('export', `▶ 开始导出  domain=${domain}  endpoint=${endpoint}  pageSize=${pageSize || 200}${startTime ? `  startTime≥${startTime}` : ''}`)
-    const { exitCode, stderr } = await runPython(args, 'export')
+    const creds = await credsForUrl(domain)
+    pushLog('export', `▶ 开始导出  domain=${domain}  endpoint=${endpoint}  pageSize=${pageSize || 200}${startTime ? `  startTime≥${startTime}` : ''}  账号=${creds?.username || '(未配置)'}`)
+    const { exitCode, stderr } = await runPython(args, 'export', credEnv(creds))
 
     if (exitCode !== 0 || !fs.existsSync(outFile)) {
         let errMsg = '导出失败'
@@ -75,11 +108,14 @@ router.post('/igo-export', ah(async (req, res) => {
     if (prevGgr    != null) args.push('--prev-ggr',    String(prevGgr))
     if (exportRaw)      args.push('--export-raw')
     if (exportAnalysis) args.push('--export-analysis')
-    if (username)       args.push('--username', username)
-    if (password)       args.push('--password', password)
 
-    pushLog('export', `▶ 开始 IGO 导出  date=${queryDate || 'today'}  endTime=${endTime || '11:00:59'}  daysBack=${daysBack || 30}`)
-    const { exitCode, stderr } = await runPython(args, 'export')
+    // 账号：前端若填了就用前端的，否则取 IGO 环境配置（后端解密）；统一走环境变量注入
+    let creds = (username || password)
+        ? { username: username || '', password: password || '', otpSecret: '' }
+        : await credsForUrl('https://igo-web.igo8.me')
+
+    pushLog('export', `▶ 开始 IGO 导出  date=${queryDate || 'today'}  endTime=${endTime || '11:00:59'}  daysBack=${daysBack || 30}  账号=${creds?.username || '(未配置)'}`)
+    const { exitCode, stderr } = await runPython(args, 'export', credEnv(creds))
 
     if (exitCode !== 0 || !fs.existsSync(outFile)) {
         let errMsg = 'IGO 导出失败'
