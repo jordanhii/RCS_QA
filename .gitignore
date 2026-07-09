@@ -41,3 +41,7 @@ npm-debug.log*
 
 # Claude Code session data & agent worktrees
 .claude/
+igo_state.json
+
+# 编辑器本地设置（含本机专属路径，不提交）
+.vscode/

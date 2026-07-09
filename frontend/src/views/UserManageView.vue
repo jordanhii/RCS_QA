@@ -84,7 +84,7 @@ import axios from 'axios'
 import { ElNotification, ElMessageBox } from 'element-plus'
 import { Plus, Key, Refresh, Delete } from '@element-plus/icons-vue'
 
-const API = 'http://localhost:3000/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 const users = ref([])
 const loading = ref(false)
 const busy = ref(false)

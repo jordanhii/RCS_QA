@@ -17,7 +17,7 @@ import axios from 'axios'
 import { ElNotification } from 'element-plus'
 import { useAppStore } from '../stores/appStore.js'
 
-const API = 'http://localhost:3000/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 const COOLDOWN_MS = 30_000
 
 export function useSyncManager({ getCacheUrl, filterRecords, mapRecord, onNewRecords }) {
@@ -45,6 +45,10 @@ export function useSyncManager({ getCacheUrl, filterRecords, mapRecord, onNewRec
     function stopTick()  { if (_tickTimer)  { clearInterval(_tickTimer); _tickTimer = null } }
 
     function markCooldown(url) { _cooldownMap[url || ''] = Date.now() }
+    // 后端已在冷却（还剩 remainingSec 秒）时，让前端按钮同步反映剩余时间
+    function markCooldownRemaining(url, remainingSec) {
+        _cooldownMap[url || ''] = Date.now() - Math.max(0, COOLDOWN_MS - remainingSec * 1000)
+    }
     function cooldownSec(url) {
         _tick.value  // reactive dependency
         const start = _cooldownMap[url || '']
@@ -65,18 +69,25 @@ export function useSyncManager({ getCacheUrl, filterRecords, mapRecord, onNewRec
                 pageSize:  store.qaConfig.syncPageSize || 200,
                 rcBaseUrl: list.rcBaseUrl || '',
             })
-            if (syncResp.data?.skipped) return
-            markCooldown(list.rcBaseUrl || '')
+            // skipped=true 表示后端处于冷却期（刚同步过）。此时不再重复触发 Python，
+            // 但缓存里通常已有最新数据 —— 仍要读取并展示，不能像以前那样直接 return 导致白屏。
+            const skipped = !!syncResp.data?.skipped
+            if (skipped) {
+                markCooldownRemaining(list.rcBaseUrl || '', syncResp.data?.remainingSec || 0)
+            } else {
+                markCooldown(list.rcBaseUrl || '')
+                await new Promise(r => setTimeout(r, 15000))   // 等 Python 抓完推送
+            }
 
-            await new Promise(r => setTimeout(r, 15000))
-
+            // 冷却时数据已在缓存里，读一次即可；正常触发则轮询等待推送到位
+            const maxAttempts = skipped ? 1 : 12
             let fetched = [], rawCount = 0
-            for (let attempt = 0; attempt < 12; attempt++) {
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
                 const { data } = await axios.get(getCacheUrl(list))
                 const allRaw = data.data || []
                 rawCount = data.totalRaw ?? allRaw.length
                 fetched  = filterRecords(allRaw, list)
-                if (fetched.length > 0 || attempt === 11) break
+                if (fetched.length > 0 || attempt === maxAttempts - 1) break
                 await new Promise(r => setTimeout(r, 5000))
             }
 

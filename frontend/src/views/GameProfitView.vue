@@ -224,7 +224,7 @@ import {
     getMatchCount as _getMatchCount, getRowClass as _getRowClass, applyLastGgr
 } from '../logic/gameProfitLogic.js'
 
-const API = 'http://localhost:3000/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 const appStore = useAppStore()
 const TYPE_ID = 8           // configs typeId (also passed via configs-type-id)
 const TYPE_COLOR = '#1677ff'

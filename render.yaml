@@ -1,0 +1,29 @@
+# Render 蓝图（Blueprint）——在 Render 后台选 "New +" → "Blueprint" 指向本仓库即可
+# 服务器只跑网页系统（导出/同步留本地 Mac），镜像轻量，free 方案即可起步。
+services:
+  - type: web
+    name: rcs-qa
+    runtime: docker
+    plan: free               # 轻量镜像，free 可用；并发大再升级
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      # ── 数据库：MongoDB Atlas 免费集群连接串（在后台设为 secret）────────────
+      - key: MONGODB_URI
+        sync: false
+      # ── 安全密钥 ──────────────────────────────────────────────────────────
+      # 云端是全新数据库、账号在页面上重新配置，所以 APP_SECRET_KEY 无需与本地一致，
+      # 交给 Render 自动生成即可（生成后固定不变，已加密账号可正常解密）。
+      - key: APP_SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      # WORKER_TOKEN 要和你 Mac 同步脚本 .env 里的一致，手动填同一串（别用随机生成）
+      - key: WORKER_TOKEN
+        sync: false
+      # ── 初始管理员（首次启动自动创建，登录后请立即改密码）──────────────────
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+    # 账号（RC/IGO）不放这里：上线后用管理员登录，在「接口配置」页面加/改即可。

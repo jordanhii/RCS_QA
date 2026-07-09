@@ -126,9 +126,12 @@ const QAConfigSchema = new mongoose.Schema({
     rcBaseUrl:       { type: String, default: 'https://rc-client.platform88.me' },
     rcEnvs: {
         type: [{
-            _id:       { type: mongoose.Schema.Types.ObjectId, auto: true },
-            name:      String,
-            rcBaseUrl: String,
+            _id:          { type: mongoose.Schema.Types.ObjectId, auto: true },
+            name:         String,
+            rcBaseUrl:    String,
+            username:     { type: String, default: '' },
+            passwordEnc:  { type: String, default: '' },   // AES 加密存储，绝不明文
+            otpSecretEnc: { type: String, default: '' },   // AES 加密存储，可空（如 IGO 无 OTP）
         }],
         default: [],
     },

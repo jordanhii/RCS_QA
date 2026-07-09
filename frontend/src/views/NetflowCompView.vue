@@ -436,7 +436,7 @@ import {
     getRowClass, getMatchCount, getY, getAlertInterval
 } from '../logic/netflowCompLogic.js'
 
-const API     = 'http://localhost:3000/api'
+const API     = import.meta.env.VITE_API_URL || '/api'
 const TYPE_ID = 9
 
 // ── Store ──────────────────────────────────────────────────────────────────────

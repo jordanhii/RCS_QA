@@ -444,7 +444,7 @@ const props = defineProps({
     deleteRequest: { type: Function, default: null },          // (id) => Promise
 })
 
-const API = 'http://localhost:3000/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 const cacheId = computed(() => props.cacheTypeId ?? props.typeId)
 
 // useSyncManager reads store.qaConfig for pageSize / interval
@@ -490,8 +490,11 @@ const fetchQAConfig = async () => {
 
 // ─── Sync composable ───────────────────────────────────────────────────────────
 const defaultSyncFilter = (raw, list) => {
-    const s = globalQAConfig.value?.syncStartTime || list?.syncStartTime
-    const e = globalQAConfig.value?.syncEndTime   || list?.syncEndTime
+    // 与界面一致：全局设了任一时间就整体用全局（子页面时间框被禁用），否则才用列表级。
+    // 不能逐字段 || 回退，否则全局只设开始时会误用列表级残留的旧结束时间，把最新数据过滤掉。
+    const useGlobalTime = globalQAConfig.value?.syncStartTime || globalQAConfig.value?.syncEndTime
+    const s = useGlobalTime ? globalQAConfig.value?.syncStartTime : list?.syncStartTime
+    const e = useGlobalTime ? globalQAConfig.value?.syncEndTime   : list?.syncEndTime
     if (!s && !e) return raw
     const sMs = s ? new Date(s).getTime() : -Infinity
     const eMs = e ? new Date(e).getTime() :  Infinity
