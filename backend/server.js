@@ -62,15 +62,22 @@ const MONGODB_URI  = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/qa_al
 // 额外放行的线上域名，多个用逗号分隔，例如 https://rcs-qa.onrender.com,https://qa.example.com
 const EXTRA_ORIGINS = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
 
-// ── CORS — 放行本地(任意端口) + 环境变量里配置的线上域名 ─────────────────────────
-app.use(cors({
-    origin: (origin, cb) => {
-        if (!origin) return cb(null, true)                              // 同源/服务器间调用
-        if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true)
-        if (EXTRA_ORIGINS.includes(origin)) return cb(null, true)
-        cb(Object.assign(new Error('CORS: origin not allowed'), { status: 403 }))
-    },
-    credentials: true,
+// ── CORS — 放行本地(任意端口) + 同源(前端由本后端托管) + 环境变量里配置的额外域名 ──
+app.use(cors((req, cb) => {
+    const origin = req.header('Origin')
+    let allowed = false
+    if (!origin) {
+        allowed = true                                                  // 无 Origin：服务器间/同源调用
+    } else if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+        allowed = true                                                  // 本地开发
+    } else if (EXTRA_ORIGINS.includes(origin)) {
+        allowed = true                                                  // 环境变量显式放行的域名
+    } else {
+        // 同源放行：Origin 的 host 与本次请求 Host 一致（前端与后端同域部署时天然成立，
+        // 换任何域名/自定义域名都无需再配 CORS_ORIGINS）
+        try { allowed = new URL(origin).host === req.header('Host') } catch { allowed = false }
+    }
+    cb(null, { origin: allowed, credentials: true })
 }))
 app.use(express.json({ limit: '10mb' }))
 app.use(cookieParser())
