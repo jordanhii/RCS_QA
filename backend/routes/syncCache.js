@@ -70,6 +70,11 @@ export function getCacheForUrl(url) {
     return syncCacheMap[k]
 }
 
+/** 清空后端内存里的同步缓存（reset 后调用，避免运行中的后端仍用内存旧数据回流） */
+export function clearSyncCacheMemory() {
+    for (const k of Object.keys(syncCacheMap)) delete syncCacheMap[k]
+}
+
 export async function restoreSyncCacheFromDb() {
     await refreshCaptureConfigCache()   // 同时加载 captureConfig 缓存
     try {
@@ -153,6 +158,14 @@ router.post('/sync-cache', (req, res) => {
     console.log(`[sync-cache] [${k}] [${source}] ${records.length} 条`)
     res.json({ success: true, count: records.length })
 })
+
+// ── Flush：清空内存缓存（reset_db.js 清完 DB 后调用，让运行中的后端立即忘掉旧数据）──
+router.post('/sync-cache/flush', ah(async (_req, res) => {
+    clearSyncCacheMemory()
+    await SyncCacheDoc.deleteMany({})   // DB 也一并清，双保险
+    console.log('🧹 sync 缓存已清空（内存 + DB）')
+    res.json({ ok: true })
+}))
 
 // ── Game-profit cache read ─────────────────────────────────────────────────────
 router.get('/game-profit-cache', (req, res) => {
