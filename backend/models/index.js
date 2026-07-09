@@ -131,7 +131,7 @@ const QAConfigSchema = new mongoose.Schema({
             rcBaseUrl:    String,
             username:     { type: String, default: '' },
             passwordEnc:  { type: String, default: '' },   // AES 加密存储，绝不明文
-            otpSecretEnc: { type: String, default: '' },   // AES 加密存储，可空（如 IGO 无 OTP）
+            otpSecretEnc: { type: String, default: '' },   // AES 加密存储，可空（部分环境无 OTP）
         }],
         default: [],
     },

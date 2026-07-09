@@ -13,7 +13,7 @@ skill to load, and how much process the task needs.
 | Backend route/API | `repo-map.md`, `project-invariants.md` | `backend-api`, `verification` | Single agent for one route; reviewer if contract changes | endpoint/manual flow |
 | Mongo schema/defaults | `domain-model.md`, `risk-levels.md`, `project-invariants.md` | `data-model`, `backend-api`, `verification` | Lead + explorer/reviewer | migration/old-document check |
 | Sync/cache/deduplication | `domain-model.md`, `risk-levels.md`, `project-invariants.md` | `sync-export`, `verification` | Lead + explorer + reviewer | duplicate/cache/worker check |
-| Export/IGO export | `domain-model.md`, `project-invariants.md` | `sync-export`, `backend-api`, `verification` | Lead + reviewer | generated output shape |
+| Export | `domain-model.md`, `project-invariants.md` | `sync-export`, `backend-api`, `verification` | Lead + reviewer | generated output shape |
 | Refactor | `context-policy.md`, `risk-levels.md` | relevant owner skill, `verification` | Plan first; workers only for disjoint files | before/after behavior check |
 | Code review | `risk-levels.md`, `project-invariants.md` | `verification` | Reviewer | findings first |
 | Documentation only | relevant docs | `repo-map` if structure changed | Single agent | link/path check |

@@ -3,7 +3,7 @@
 ## Core Concepts
 
 - QA config: global sync settings and RC environment list.
-- RC environment: named `rcBaseUrl` target used for sync and QA workflows.
+- RC environment (`QAConfig.rcEnvs` 每条)：`name` + `rcBaseUrl` + **加密账号**（`username` 明文，`passwordEnc` / `otpSecretEnc` 为 AES-256-GCM 密文）。在「接口配置」页管理；同步/导出经后端解密取用，前端只看得到「是否已设置」。
 - Alert config: threshold/config records keyed by alert `typeId`.
 - Capture config: API endpoint and field path mapping for each alert type.
 - Test list: user-managed alert record list for a specific alert type.
@@ -49,7 +49,8 @@ Schema/default/persistence work should load `aiTeam/skills/data-model/SKILL.md`.
 
 - `Config.mult7Cont` / `Config.mult30Cont`：连续告警的前7/前30天倍数（默认 1.5）。
 - `TestList.configIds`（[ObjectId]）：列表可关联多个告警配置（取代单一 `configId`，前端 `fetchLists` 会把旧 `configId` 迁移进 `configIds`）。
-- `syncStartTime` + `syncEndTime`：同步「抓取时间范围」（起+止），取代旧的单一起始时间；`TestList` / `GameProfitList` / `QAConfig` 均有。
+- `syncStartTime` + `syncEndTime`：同步「抓取时间范围」（起+止），取代旧的单一起始时间；`TestList` / `GameProfitList` / `QAConfig` 均有。生效口径：全局(质检配置)设了任一时间就整体用全局、否则用列表级（见 `frontend/src/logic/syncCore.js` `syncTimeWindow`，**不逐字段回退**，避免残留列表级时间误挡最新数据）。
+- `QAConfig.rcEnvs[].username` / `passwordEnc` / `otpSecretEnc`：RC 环境的加密账号字段（AES-256-GCM，`backend/crypto.js`），取代原先写死在脚本 / `.env` 的账号。
 
 ## Record Semantics
 

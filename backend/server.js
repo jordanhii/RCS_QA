@@ -9,7 +9,7 @@
  *   routes/qaConfig.js       — QA global config + RC env management
  *   routes/captureConfig.js  — Field mapping config
  *   routes/syncCache.js      — Sync cache, heartbeat, debug log
- *   routes/export.js         — Excel & IGO export via Python workers
+ *   routes/export.js         — Excel export via Python worker
  */
 import './env.js'
 import express from 'express'
@@ -103,10 +103,9 @@ async function seedAdmin() {
 }
 
 /**
- * 首次迁移：把 .env / 源码里的账号加密导入到数据库的 rcEnvs 配置。
+ * 首次迁移：把 .env 里的账号加密导入到数据库的 rcEnvs 配置。
  * - 测试站(platform88) ← RC_USERNAME/RC_PASSWORD/RC_OTP_SECRET
  * - 正式站(platform10) ← RC_PROD_USERNAME/RC_PROD_PASSWORD/RC_PROD_OTP_SECRET
- * - IGO(igo8.me)       ← IGO_USERNAME/IGO_PASSWORD，无 OTP
  * 只在对应环境「还没配用户名」时才写入，绝不覆盖你在页面上改过的账号。
  */
 async function seedRcEnvCredentials() {
@@ -130,21 +129,9 @@ async function seedRcEnvCredentials() {
     fill(find('platform88'), process.env.RC_USERNAME, process.env.RC_PASSWORD, process.env.RC_OTP_SECRET)
     fill(find('platform10'), process.env.RC_PROD_USERNAME, process.env.RC_PROD_PASSWORD, process.env.RC_PROD_OTP_SECRET)
 
-    // IGO：不存在则新建（账号来自 IGO_USERNAME/IGO_PASSWORD，源码不写死；
-    // 环境变量为空则建一条空账号，登录后到「接口配置」页面填即可）
-    if (!find('igo8.me') && !find('igo-web')) {
-        cfg.rcEnvs.push({
-            name:        'IGO',
-            rcBaseUrl:   'https://igo-web.igo8.me/igo-report',
-            username:    process.env.IGO_USERNAME || '',
-            passwordEnc: process.env.IGO_PASSWORD ? encryptSecret(process.env.IGO_PASSWORD) : '',
-            otpSecretEnc: '',
-        })
-        changed = true
-    }
     if (changed) {
         await cfg.save()
-        console.log('🔐 已把 .env / 内置账号加密导入到 rcEnvs 配置')
+        console.log('🔐 已把 .env 账号加密导入到 rcEnvs 配置')
     }
 }
 

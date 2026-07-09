@@ -7,9 +7,10 @@
 - `rc_sync_service.py`: long-running RC sync service used by backend sync APIs.
 - `fetch_rc_data.py`: RC data fetching helper.
 - `export_worker.py`: Excel export worker.
-- `igo_export_worker.py`: IGO export worker.
 - `ecosystem.config.cjs`: process manager configuration.
 - `state*.json`, `*_state.json`: local worker/runtime state files.
+- `Dockerfile`, `render.yaml`, `requirements.txt`: 部署（Render/Docker，后端同域托管前端）+ Python 依赖。
+- `DEPLOY.md`: 上线部署说明（Render + MongoDB Atlas，导出/同步留本地 Mac）。
 - `aiTeam/`: AI workflow docs, skills, roles, and prompts.
 
 ## AI Workflow Control Files
@@ -26,17 +27,22 @@
 
 Entry point:
 
-- `backend/server.js`
+- `backend/server.js`（`import './env.js'` 显式加载根目录 .env；生产托管 `frontend/dist`）
+- `backend/env.js`: 显式加载仓库根 `.env`，保证从任意目录启动都读到。
+- `backend/crypto.js`: AES-256-GCM 加解密（RC 账号密码/OTP 密文存取的唯一入口）。
 
 Routes mounted by `backend/server.js`:
 
+- `/api/health` -> 健康检查（公开；DB 未连时返回 503，部署平台探活用）
+- `/api/auth` -> `backend/routes/auth.js`（登录，公开）
+- `/api/users` -> `backend/routes/users.js`（仅管理员）
 - `/api/configs` -> `backend/routes/configs.js`
 - `/api/test-lists` -> `backend/routes/testLists.js`
 - `/api/game-profit-lists` -> `backend/routes/gameProfitLists.js`
-- `/api/qa-config` -> `backend/routes/qaConfig.js`
+- `/api/qa-config` -> `backend/routes/qaConfig.js`（含 rc-envs 账号增删改 + `/rc-envs/credentials` 供 worker 取解密凭证；`requireAuthOrWorker`）
 - `/api/capture-config` -> `backend/routes/captureConfig.js`
-- `/api/* sync` -> `backend/routes/syncCache.js`
-- `/api/* export` -> `backend/routes/export.js`
+- `/api/sync-*`, `/api/sync-cache/*`（含 `POST /sync-cache/flush` 清缓存） -> `backend/routes/syncCache.js`（`requireAuthOrWorker`）
+- `/api/export-data` -> `backend/routes/export.js`（RCS Excel 导出；IGO 导出已移除）
 
 Models:
 
@@ -44,15 +50,16 @@ Models:
 - `TestList`: alert test lists for typeId based workflows.
 - `GameProfitList`: game-profit / COLORGAME records.
 - `CaptureConfig`: per-alert-type endpoint and field mapping.
-- `QAConfig`: singleton global sync settings and RC environments.
+- `QAConfig`: singleton 全局同步设置 + RC 环境 `rcEnvs`（每条含 `name`/`rcBaseUrl` + 加密账号 `username`/`passwordEnc`/`otpSecretEnc`）。
 - `SyncCacheDoc`: persisted sync cache keyed by normalized RC URL.
+- `User`: 登录账号（用户名 / 密码哈希 / 角色 admin|user；首次启动 seedAdmin 预置管理员）。
 
 Backend notes:
 
-- MongoDB URL is currently `mongodb://127.0.0.1:27017/qa_alert_system`.
-- `server.js` runs startup migrations before restoring sync cache.
+- MongoDB URL 来自 `MONGODB_URI`（本地默认 `mongodb://127.0.0.1:27017/qa_alert_system`，线上用 Atlas）。
+- `server.js` 启动时：生产环境校验安全密钥（缺 `APP_SECRET_KEY`/`JWT_SECRET`/`WORKER_TOKEN` 直接拒绝启动）→ 连库 → 跑迁移 → 恢复同步缓存 → seedAdmin → 从 .env 加密导入 RC 账号。
 - Route files own business behavior; keep `server.js` as an entry point.
-- API responses are JSON and frontend calls are mostly hard-coded to `http://localhost:3000/api`.
+- API 响应为 JSON；前端 API 基址为 `import.meta.env.VITE_API_URL`，默认同源 `/api`（后端同域托管前端；本地开发经 Vite proxy 转发到 3000）。
 
 ## Frontend
 
@@ -66,7 +73,7 @@ Routes (static routes MUST stay before `/test/:id`):
 
 - `/config/alert`: `ConfigView.vue` — 告警配置（按 typeId 配阈值/倍数）
 - `/config/capture`: `CaptureView.vue` — 接口配置（RC 地址 + 字段映射）
-- `/config/qa`: `QAConfigView.vue` — 质检配置（同步参数 + 批量开关 + 数据/IGO 导出）
+- `/config/qa`: `QAConfigView.vue` — 质检配置（同步参数 + 批量开关 + 数据导出）
 - `/test/game-profit`: `GameProfitView.vue` — 游戏盈利(CG)
 - `/test/netflow-hist`: `NetflowHistView.vue` — 存提差同比
 - `/test/promo-yoy`: `PromoYoyView.vue` — 优惠同比（typeId 11）
@@ -77,7 +84,8 @@ Routes (static routes MUST stay before `/test/:id`):
 Shared frontend modules:
 
 - `frontend/src/stores/appStore.js`: global QA config and RC environment list.
-- `frontend/src/composables/useSyncManager.js`: shared sync/cooldown/timer logic；`filterRecords(allRaw, list)` 按 list 的 RC 地址 + 抓取时间范围过滤。
+- **`frontend/src/logic/syncCore.js`: 同步核心单一来源**——`requestAndPollCache`（request-sync + 冷却/skipped 处理 + 轮询缓存）与 `filterByTimeWindow`/`syncTimeWindow`（全局优先的时间窗过滤）。TestView、AlertListShell、useSyncManager 三处都调它；改同步行为改这里，别在各处重复。
+- `frontend/src/composables/useSyncManager.js`: AlertListShell 用的同步编排（冷却计时器 + 列表增删）；核心流程委托给 `syncCore`，传入的 `filterRecords` 默认就是 `syncCore.filterByTimeWindow`。
 - `frontend/src/logic/alertLogic.js`: alert calculation logic.
 - `frontend/src/logic/gameProfitLogic.js`: game-profit calculation logic.
 - `frontend/src/logic/netflowCompLogic.js`: netflow comparison logic.
@@ -112,8 +120,10 @@ Typical alert/config flow:
 
 - `backend/models/index.js`: schema changes can affect persistence and migrations.
 - `backend/routes/syncCache.js`, `rc_sync_service.py`: sync behavior and duplicate-record risk.
+- `frontend/src/logic/syncCore.js`: 同步核心，改一处影响所有列表页（TestView + AlertListShell + useSyncManager）。
+- `backend/crypto.js`, `backend/routes/qaConfig.js`: 账号加解密 / 凭证接口，破坏会导致账号解不开或泄露。
 - `frontend/src/composables/useSyncManager.js`: shared timers and list mutation behavior.
 - `frontend/src/logic/*.js`: calculation correctness and test expectations.
-- `backend/routes/export.js`, `export_worker.py`, `igo_export_worker.py`: file format compatibility.
+- `backend/routes/export.js`, `export_worker.py`: file format compatibility.
 - `frontend/src/router.js`: static route ordering matters before `/test/:id`.
 - `aiTeam/docs/project-invariants.md`: update when durable non-negotiable rules change.

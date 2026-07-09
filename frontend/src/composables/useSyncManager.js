@@ -16,6 +16,7 @@ import { ref, reactive } from 'vue'
 import axios from 'axios'
 import { ElNotification } from 'element-plus'
 import { useAppStore } from '../stores/appStore.js'
+import { requestAndPollCache } from '../logic/syncCore.js'
 
 const API = import.meta.env.VITE_API_URL || '/api'
 const COOLDOWN_MS = 30_000
@@ -65,31 +66,19 @@ export function useSyncManager({ getCacheUrl, filterRecords, mapRecord, onNewRec
         if (list._isSyncingNow) return
         list._isSyncingNow = true
         try {
-            const syncResp = await axios.post(`${API}/request-sync`, {
-                pageSize:  store.qaConfig.syncPageSize || 200,
-                rcBaseUrl: list.rcBaseUrl || '',
+            // 核心流程（request-sync + 冷却处理 + 轮询缓存）走共享 syncCore，两页面一致
+            const { fetched, rawCount } = await requestAndPollCache({
+                list,
+                pageSize: store.qaConfig.syncPageSize,
+                cacheUrl: getCacheUrl(list),
+                filter:   raw => filterRecords(raw, list),
+                waitMs:   15000,
+                maxAttempts: 12,
+                pollGapMs:   5000,
+                onCooldown: sec => sec === null
+                    ? markCooldown(list.rcBaseUrl || '')
+                    : markCooldownRemaining(list.rcBaseUrl || '', sec),
             })
-            // skipped=true 表示后端处于冷却期（刚同步过）。此时不再重复触发 Python，
-            // 但缓存里通常已有最新数据 —— 仍要读取并展示，不能像以前那样直接 return 导致白屏。
-            const skipped = !!syncResp.data?.skipped
-            if (skipped) {
-                markCooldownRemaining(list.rcBaseUrl || '', syncResp.data?.remainingSec || 0)
-            } else {
-                markCooldown(list.rcBaseUrl || '')
-                await new Promise(r => setTimeout(r, 15000))   // 等 Python 抓完推送
-            }
-
-            // 冷却时数据已在缓存里，读一次即可；正常触发则轮询等待推送到位
-            const maxAttempts = skipped ? 1 : 12
-            let fetched = [], rawCount = 0
-            for (let attempt = 0; attempt < maxAttempts; attempt++) {
-                const { data } = await axios.get(getCacheUrl(list))
-                const allRaw = data.data || []
-                rawCount = data.totalRaw ?? allRaw.length
-                fetched  = filterRecords(allRaw, list)
-                if (fetched.length > 0 || attempt === maxAttempts - 1) break
-                await new Promise(r => setTimeout(r, 5000))
-            }
 
             const existedIds = new Set(list.records.map(r => r.alertId).filter(Boolean))
             const newOnes = fetched

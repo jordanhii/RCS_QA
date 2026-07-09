@@ -76,7 +76,7 @@ RCS_QA is a QA alert/configuration tool with:
 
 - Express + Mongoose backend in `backend/`
 - Vue 3 + Vite + Element Plus frontend in `frontend/`
-- Python workers for RC sync and Excel/IGO export at repo root
+- Python workers for RC sync and Excel export at repo root
 - MongoDB database `qa_alert_system`
 - frontend tests with Vitest
 

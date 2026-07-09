@@ -35,11 +35,11 @@
 | `ADMIN_USERNAME` | 初始管理员账号（如 admin） |
 | `ADMIN_PASSWORD` | 初始管理员密码（登录后请改） |
 
-### 账号（RC / IGO）怎么配？
+### RC 账号怎么配？
 账号**不再写死**，也不必长期放环境变量。两种方式：
 - **推荐**：上线后用管理员登录，到系统「**接口配置**」页面直接添加/编辑各环境的
   网址 + 用户名 + 密码 + OTP 密钥（加密存库，页面只显示「已设置」）。
-- 或首次启动时用 `RC_USERNAME/…`、`RC_PROD_…`、`IGO_USERNAME/IGO_PASSWORD`
+- 或首次启动时用 `RC_USERNAME/…`、`RC_PROD_…`
   让它自动导入一次（仅首次、仅在对应环境还没账号时）。
 
 > `PORT` 不用填，Render 自动注入。前后端同域，`CORS_ORIGINS` 也不用填。
@@ -49,13 +49,13 @@
 
 ## 三、导出 / 同步留在本地 Mac
 
-导出（`export_worker.py` / `igo_export_worker.py`）和同步（`rc_sync_service.py`）
+导出（`export_worker.py`）和同步（`rc_sync_service.py`）
 都要开浏览器抓数据，**不搬上线**——服务器镜像因此很轻，free 方案够用。
 
 在你 Mac 本地跑它们，把数据推到线上后端即可：
 1. 本地 `.env` 的 `BACKEND_URL` 改成线上网址（如 `https://rcs-qa.onrender.com`）
 2. 本地 `.env` 的 `WORKER_TOKEN` 要和 Render 上设的**同一串**
-3. 账号（RC/IGO）上线后在网页「接口配置」页面配好，脚本会自动向后端取（本地 `.env` 里的旧账号仅作兜底）
+3. RC 账号上线后在网页「接口配置」页面配好，脚本会自动向后端取（本地 `.env` 里的旧账号仅作兜底）
 
 ## 五、本地用 Docker 验证（可选）
 

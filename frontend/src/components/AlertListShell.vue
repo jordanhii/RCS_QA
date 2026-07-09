@@ -399,6 +399,7 @@ import { ElNotification, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
 import { CircleCheck, CircleClose, Loading, Plus, Edit, Check, Upload, InfoFilled, Warning, DocumentAdd, ArrowDown } from '@element-plus/icons-vue'
 import { useSyncManager } from '../composables/useSyncManager.js'
+import { filterByTimeWindow } from '../logic/syncCore.js'
 import { useAppStore } from '../stores/appStore.js'
 import { filterByAlertType, getTimeRange } from '../logic/importMapper.js'
 
@@ -489,20 +490,8 @@ const fetchQAConfig = async () => {
 }
 
 // ─── Sync composable ───────────────────────────────────────────────────────────
-const defaultSyncFilter = (raw, list) => {
-    // 与界面一致：全局设了任一时间就整体用全局（子页面时间框被禁用），否则才用列表级。
-    // 不能逐字段 || 回退，否则全局只设开始时会误用列表级残留的旧结束时间，把最新数据过滤掉。
-    const useGlobalTime = globalQAConfig.value?.syncStartTime || globalQAConfig.value?.syncEndTime
-    const s = useGlobalTime ? globalQAConfig.value?.syncStartTime : list?.syncStartTime
-    const e = useGlobalTime ? globalQAConfig.value?.syncEndTime   : list?.syncEndTime
-    if (!s && !e) return raw
-    const sMs = s ? new Date(s).getTime() : -Infinity
-    const eMs = e ? new Date(e).getTime() :  Infinity
-    return raw.filter(r => {
-        const t = new Date(r.alertTime).getTime()
-        return !isNaN(t) && t >= sMs && t <= eMs
-    })
-}
+// 时间窗过滤走共享 syncCore（与 TestView 完全同一份逻辑）
+const defaultSyncFilter = (raw, list) => filterByTimeWindow(raw, globalQAConfig.value, list)
 
 const {
     globalSyncStatus, fetchSyncStatus, cooldownSec, startTick, stopTick, destroyAll,

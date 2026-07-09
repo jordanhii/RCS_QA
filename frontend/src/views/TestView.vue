@@ -609,6 +609,7 @@ import { CircleCheck, CircleClose, Loading, Plus, Edit, Check, Upload, InfoFille
 import { ALERT_TYPE_MAP, PAGE_TITLES, TYPE_DISPLAY_NAMES, CONT_TYPE_OPTIONS, TEST_SLUG_TO_TYPEID, getVal1Label, getVal2Label, getRatioLabel } from '../logic/alertTypes.js'
 import { calcNormalResult, calcContResult, calcLogicMatch, getContResultColor, calcRatio, calcRealDeposit } from '../logic/alertLogic.js'
 import { fmtDate, filterByAlertType, getTimeRange, mapExcelRows } from '../logic/importMapper.js'
+import { requestAndPollCache, filterByTimeWindow } from '../logic/syncCore.js'
 import { amtFormat, amtParse } from '../logic/format.js'
 import {
     calcDecline as nfCalcDecline,
@@ -675,6 +676,11 @@ const markCooldown = (url) => {
     const key = (url || '').trim().toLowerCase().replace(/\/+$/, '') || 'default'
     cooldownEnds.set(key, Date.now() + COOLDOWN_MS)
 }
+/** 后端已在冷却（还剩 remainingSec 秒）时，让按钮同步反映后端剩余时间 */
+const markCooldownRemaining = (url, remainingSec) => {
+    const key = (url || '').trim().toLowerCase().replace(/\/+$/, '') || 'default'
+    cooldownEnds.set(key, Date.now() + Math.max(0, remainingSec) * 1000)
+}
 
 const fetchQAConfig = async () => {
     try {
@@ -728,53 +734,26 @@ const runSync = async (list, isManual = false, skipRequest = false) => {
     if (list._isSyncingNow) return
     list._isSyncingNow = true
     try {
-        // skipRequest=true 时（页面恢复/冷却），直接读缓存，不触发新同步
-        let waitMs = 0
-        if (!skipRequest) {
-            const syncResp = await axios.post(`${API}/request-sync`, {
-                pageSize:  globalQAConfig.value.syncPageSize || 200,
-                rcBaseUrl: list.rcBaseUrl || ''
-            })
-            if (syncResp.data?.skipped) {
-                // 被冷却限流：不触发新同步，但仍读一次缓存（可能已有数据）
-                // waitMs 保持 0，直接进入 cache 轮询
-            } else {
-                markCooldown(list.rcBaseUrl || '')
-                // 等待 rc_sync_service.py 点击查询并推送数据（约 8s）
-                waitMs = 8000
-            }
-        }
+        // 核心流程（request-sync + 冷却处理 + 轮询缓存）走共享 syncCore，与优惠/游戏盈利页一致。
+        // 保持本页原有节奏：等待 8s、轮询 5 次；先取原始记录，再做时间过滤（早停按原始数据判定）。
+        const { fetched: rawFetched, rawCount } = await requestAndPollCache({
+            list,
+            pageSize:    globalQAConfig.value.syncPageSize,
+            cacheUrl:    `${API}/sync-cache/${typeId}?url=${encodeURIComponent(list.rcBaseUrl || '')}`,
+            skipRequest,
+            waitMs:      8000,
+            maxAttempts: 5,
+            pollGapMs:   skipRequest ? 500 : 3000,
+            onCooldown:  sec => sec === null
+                ? markCooldown(list.rcBaseUrl || '')
+                : markCooldownRemaining(list.rcBaseUrl || '', sec),
+        })
 
-        let fetched = [], rawCount = 0
-        if (waitMs > 0) await new Promise(r => setTimeout(r, waitMs))
-
-        for (let attempt = 0; attempt < 5; attempt++) {
-            const res = await axios.get(`${API}/sync-cache/${typeId}`, {
-                params: { url: list.rcBaseUrl || '' }
-            })
-            fetched  = res.data.data     || []
-            rawCount = res.data.totalRaw ?? 0
-            if (fetched.length > 0 || attempt === 4) break
-            await new Promise(r => setTimeout(r, skipRequest ? 500 : 3000))
-        }
-
-        // 抓取时间范围过滤：与界面一致——全局设了任一时间就整体用全局（子页面时间框被禁用），
-        // 否则才用列表级。不能逐字段 || 回退，否则全局只设了开始时，会误用列表级残留的旧结束时间，
-        // 把该时间之后的数据（如最新告警）悄悄过滤掉。
-        const useGlobalTime = globalQAConfig.value.syncStartTime || globalQAConfig.value.syncEndTime
-        const sTime = useGlobalTime ? globalQAConfig.value.syncStartTime : list.syncStartTime
-        const eTime = useGlobalTime ? globalQAConfig.value.syncEndTime   : list.syncEndTime
-        if (sTime || eTime) {
-            const sMs = sTime ? new Date(sTime).getTime() : -Infinity
-            const eMs = eTime ? new Date(eTime).getTime() :  Infinity
-            const before = fetched.length
-            fetched = fetched.filter(r => {
-                const t = new Date(r.alertTime).getTime()
-                return !isNaN(t) && t >= sMs && t <= eMs
-            })
-            if (fetched.length < before)
-                console.log(`[syncTimeRange] 过滤掉 ${before - fetched.length} 条不在 [${sTime || '不限'} ~ ${eTime || '不限'}] 的数据`)
-        }
+        // 抓取时间范围过滤（共享 syncCore.filterByTimeWindow，逻辑与其它页面一致）
+        const before  = rawFetched.length
+        const fetched = filterByTimeWindow(rawFetched, globalQAConfig.value, list)
+        if (fetched.length < before)
+            console.log(`[syncTimeRange] 过滤掉 ${before - fetched.length} 条不在同步时间窗内的数据`)
 
         const existingIds = new Set(
             list.records.map(r => r.alertId?.toString().trim()).filter(Boolean)
